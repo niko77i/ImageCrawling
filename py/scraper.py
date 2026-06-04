@@ -69,3 +69,43 @@ def scrape_images(url: str) -> list[str]:
             unique.append(u)
 
     return unique
+
+
+def scrape_logo(url: str) -> str | None:
+    """从 Google Play 页面 <div class="Mqg6jb Mhrnjf"> 中提取第一张图片 URL。
+
+    参数:
+        url: Google Play 应用页面链接
+
+    返回:
+        第一张图片的绝对 URL，未找到返回 None
+    """
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        )
+    }
+
+    try:
+        resp = requests.get(url, headers=headers, timeout=30)
+        resp.raise_for_status()
+    except requests.RequestException:
+        return None
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+    logo_div = soup.find("div", class_="Mqg6jb Mhrnjf")
+
+    if logo_div is None:
+        return None
+
+    img = logo_div.find("img")
+    if img is None:
+        return None
+
+    src = img.get("src")
+    if not src:
+        return None
+
+    return urljoin(url, src)

@@ -10,8 +10,8 @@ if _current_dir not in sys.path:
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 
-from scraper import scrape_images, ScrapeError
-from resizer import process_image, ResizeError
+from scraper import scrape_images, scrape_logo, ScrapeError
+from resizer import process_image, save_logo, ResizeError
 from utils import extract_package_name
 
 # 判断是否为 PyInstaller 打包模式
@@ -51,6 +51,8 @@ def scrape():
 
     url = data.get("url", "").strip()
     save_dir = data.get("save_dir", "").strip()
+    # 新增参数：是否下载广告图片（默认 true，向后兼容）
+    include_ads_images = data.get("include_ads_images", True)
 
     if not url:
         return jsonify({"success": False, "error": "URL 不能为空"}), 400
@@ -70,32 +72,62 @@ def scrape():
     except OSError as e:
         return jsonify({"success": False, "error": f"无法创建目录: {e}"}), 500
 
-    # 3. 爬取图片 URL
-    try:
-        img_urls = scrape_images(url)
-    except ScrapeError as e:
-        return jsonify({"success": False, "error": str(e)}), 500
-
-    if not img_urls:
-        return jsonify({"success": False, "error": "该页面未找到图片"}), 404
-
-    # 4. 逐张处理
-    results = []
-    for i, img_url in enumerate(img_urls):
-        try:
-            result = process_image(img_url, pkg_dir, f"img_{i+1:03d}")
-            results.append(result)
-        except ResizeError:
-            # 单张失败不影响其他图片
-            continue
-
-    return jsonify({
+    response = {
         "success": True,
         "package_name": pkg_name,
-        "image_count": len(results),
         "saved_path": pkg_dir,
-        "images": results,
-    })
+    }
+
+    # ---- 3a. Logo 爬取（始终执行） ----
+    try:
+        logo_url = scrape_logo(url)
+        if logo_url:
+            logo_dir = os.path.join(pkg_dir, "包logo")
+            try:
+                os.makedirs(logo_dir, exist_ok=True)
+                logo_result = save_logo(logo_url, logo_dir, f"{pkg_name}_logo")
+                response["logo"] = logo_result
+            except (ResizeError, OSError):
+                response["logo"] = None
+        else:
+            response["logo"] = None
+    except Exception:
+        response["logo"] = None
+
+    # ---- 3b. 广告图片爬取（可选） ----
+    if include_ads_images:
+        try:
+            img_urls = scrape_images(url)
+        except ScrapeError as e:
+            response["image_count"] = 0
+            response["images"] = []
+            if response["logo"] is None:
+                return jsonify({"success": False, "error": str(e)}), 500
+            # 有 logo 但广告图爬取失败 — 部分成功
+            response["success"] = True
+            return jsonify(response)
+
+        if not img_urls:
+            response["image_count"] = 0
+            response["images"] = []
+            if response["logo"] is None:
+                return jsonify({"success": False, "error": "该页面未找到图片"}), 404
+        else:
+            results = []
+            for i, img_url in enumerate(img_urls):
+                try:
+                    # 命名改为 包名_序号
+                    result = process_image(img_url, pkg_dir, f"{pkg_name}_{i+1:03d}")
+                    results.append(result)
+                except ResizeError:
+                    continue
+            response["image_count"] = len(results)
+            response["images"] = results
+    else:
+        response["image_count"] = 0
+        response["images"] = []
+
+    return jsonify(response)
 
 
 # ---------- 启动 ----------

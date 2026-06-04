@@ -45,18 +45,21 @@ async function startScrape() {
         resultList.appendChild(item);
 
         try {
+            const includeAds = document.getElementById("includeAds").checked;
             const resp = await fetch(`${API_BASE}/api/scrape`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url: url, save_dir: saveDir }),
+                body: JSON.stringify({ url: url, save_dir: saveDir, include_ads_images: includeAds }),
             });
             const data = await resp.json();
 
             if (data.success) {
                 item.className = "result-item success";
-                item.innerHTML = `<span class="icon">✅</span> <span class="text">${data.package_name}</span> <span class="detail">— ${data.image_count} 张图片 → ${data.saved_path}</span>`;
+                const logoInfo = data.logo ? " + logo" : "";
+                const imgInfo = includeAds ? ` — ${data.image_count} 张广告图` : "";
+                item.innerHTML = `<span class="icon">✅</span> <span class="text">${data.package_name}</span> <span class="detail">${imgInfo}${logoInfo} → ${data.saved_path}</span>`;
                 successCount++;
-                totalImages += data.image_count;
+                totalImages += (data.image_count || 0) + (data.logo ? 1 : 0);
             } else {
                 item.className = "result-item error";
                 item.innerHTML = `<span class="icon">❌</span> <span class="text">${url}</span> <span class="detail">— ${data.error}</span>`;
