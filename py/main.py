@@ -51,7 +51,7 @@ def scrape():
 
     url = data.get("url", "").strip()
     save_dir = data.get("save_dir", "").strip()
-    # 新增参数：是否下载广告图片（默认 true，向后兼容）
+    # 新增参数：是否按 Google Ads 规格放大图片（默认 true，向后兼容）
     include_ads_images = data.get("include_ads_images", True)
 
     if not url:
@@ -94,38 +94,35 @@ def scrape():
     except Exception:
         response["logo"] = None
 
-    # ---- 3b. 广告图片爬取（可选） ----
-    if include_ads_images:
-        try:
-            img_urls = scrape_images(url)
-        except ScrapeError as e:
-            response["image_count"] = 0
-            response["images"] = []
-            if response["logo"] is None:
-                return jsonify({"success": False, "error": str(e)}), 500
-            # 有 logo 但广告图爬取失败 — 部分成功
-            response["success"] = True
-            return jsonify(response)
-
-        if not img_urls:
-            response["image_count"] = 0
-            response["images"] = []
-            if response["logo"] is None:
-                return jsonify({"success": False, "error": "该页面未找到图片"}), 404
-        else:
-            results = []
-            for i, img_url in enumerate(img_urls):
-                try:
-                    # 命名改为 包名_序号
-                    result = process_image(img_url, pkg_dir, f"{pkg_name}_{i+1:03d}")
-                    results.append(result)
-                except ResizeError:
-                    continue
-            response["image_count"] = len(results)
-            response["images"] = results
-    else:
+    # ---- 3b. 广告图片爬取（始终执行） ----
+    try:
+        img_urls = scrape_images(url)
+    except ScrapeError as e:
         response["image_count"] = 0
         response["images"] = []
+        if response["logo"] is None:
+            return jsonify({"success": False, "error": str(e)}), 500
+        # 有 logo 但广告图爬取失败 — 部分成功
+        response["success"] = True
+        return jsonify(response)
+
+    if not img_urls:
+        response["image_count"] = 0
+        response["images"] = []
+        if response["logo"] is None:
+            return jsonify({"success": False, "error": "该页面未找到图片"}), 404
+    else:
+        results = []
+        # 不勾选时跳过 Google Ads 规格缩放，保留原图
+        skip_scaling = not include_ads_images
+        for i, img_url in enumerate(img_urls):
+            try:
+                result = process_image(img_url, pkg_dir, f"{pkg_name}_{i+1:03d}", skip_scaling=skip_scaling)
+                results.append(result)
+            except ResizeError:
+                continue
+        response["image_count"] = len(results)
+        response["images"] = results
 
     return jsonify(response)
 

@@ -56,8 +56,8 @@ async function startScrape() {
             if (data.success) {
                 item.className = "result-item success";
                 const logoInfo = data.logo ? " + logo" : "";
-                const imgInfo = includeAds ? ` — ${data.image_count} 张广告图` : "";
-                item.innerHTML = `<span class="icon">✅</span> <span class="text">${data.package_name}</span> <span class="detail">${imgInfo}${logoInfo} → ${data.saved_path}</span>`;
+                const scaleInfo = includeAds ? "" : "（原图）";
+                item.innerHTML = `<span class="icon">✅</span> <span class="text">${data.package_name}</span> <span class="detail">— ${data.image_count} 张图片${scaleInfo}${logoInfo} → ${data.saved_path}</span>`;
                 successCount++;
                 totalImages += (data.image_count || 0) + (data.logo ? 1 : 0);
             } else {
