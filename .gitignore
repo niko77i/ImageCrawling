@@ -1,0 +1,29 @@
+# 构建产物
+build/
+dist/
+*.spec
+
+# 包缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.idea/
+.vscode/
+
+# Superpowers
+.superpowers/
+
+# 虚拟环境
+venv/
+.venv/
+*.egg-info/
+
+# 测试输出
+test_output*/
+py/test_output*/
+
+# 系统文件
+.DS_Store
+Thumbs.db
