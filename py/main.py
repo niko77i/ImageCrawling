@@ -79,16 +79,19 @@ def scrape():
     }
 
     # ---- 3a. Logo 爬取（始终执行） ----
-    logo_url = scrape_logo(url)
-    if logo_url:
-        logo_dir = os.path.join(pkg_dir, "包logo")
-        try:
-            os.makedirs(logo_dir, exist_ok=True)
-            logo_result = save_logo(logo_url, logo_dir, f"{pkg_name}_logo")
-            response["logo"] = logo_result
-        except (ResizeError, OSError):
+    try:
+        logo_url = scrape_logo(url)
+        if logo_url:
+            logo_dir = os.path.join(pkg_dir, "包logo")
+            try:
+                os.makedirs(logo_dir, exist_ok=True)
+                logo_result = save_logo(logo_url, logo_dir, f"{pkg_name}_logo")
+                response["logo"] = logo_result
+            except (ResizeError, OSError):
+                response["logo"] = None
+        else:
             response["logo"] = None
-    else:
+    except Exception:
         response["logo"] = None
 
     # ---- 3b. 广告图片爬取（可选） ----
@@ -107,6 +110,8 @@ def scrape():
         if not img_urls:
             response["image_count"] = 0
             response["images"] = []
+            if response["logo"] is None:
+                return jsonify({"success": False, "error": "该页面未找到图片"}), 404
         else:
             results = []
             for i, img_url in enumerate(img_urls):
