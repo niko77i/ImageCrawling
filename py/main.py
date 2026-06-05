@@ -295,12 +295,12 @@ def video_generate():
                 api_key = ai["api_key"]
                 custom_prompt = ai.get("prompt") or None
                 ai_videos = {}
-                # AI 视频保存目录
-                ai_output_dir = os.path.join(os.path.dirname(output_path) or ".", "_ai_videos")
-                os.makedirs(ai_output_dir, exist_ok=True)
+                # AI 视频临时目录（项目根目录下的 temp/，用完即删）
+                ai_temp_dir = os.path.join(os.path.dirname(_current_dir), "temp", "ai_videos")
+                os.makedirs(ai_temp_dir, exist_ok=True)
                 import shutil
                 from concurrent.futures import ThreadPoolExecutor, as_completed
-                _debug(f"[AI-DEBUG] AI video output dir: {ai_output_dir}, parallel: max 3 threads")
+                _debug(f"[AI-DEBUG] AI temp dir: {ai_temp_dir}, parallel: max 3 threads")
 
                 # 并行生成 AI 视频（最多 3 个并发）
                 def _gen_one(idx, img_path):
@@ -310,8 +310,8 @@ def video_generate():
                         provider = get_provider(ai.get("service", "doubao"))
                         ai_video = provider.generate_video(img_path, duration, api_key, custom_prompt)
                         basename = os.path.splitext(os.path.basename(img_path))[0]
-                        saved_path = os.path.join(ai_output_dir, f"{basename}_ai.mp4")
-                        shutil.copy2(ai_video, saved_path)
+                        saved_path = os.path.join(ai_temp_dir, f"{basename}_ai.mp4")
+                        shutil.move(ai_video, saved_path)
                         _debug(f"[AI-DEBUG] [{idx+1}/{len(images)}] SUCCESS -> {saved_path}")
                         return (idx, img_path, saved_path, None)
                     except AIServiceError as e:
@@ -344,10 +344,15 @@ def video_generate():
         # 执行 FFmpeg（生成初始视频）
         task.run()
 
-        # AI 视频已保存
+        # 清理 AI 临时视频
         ai_videos = task.params.get("_ai_videos", {})
         if ai_videos:
-            _debug(f"[AI-DEBUG] AI videos saved, NOT deleted. Count: {len(ai_videos)}")
+            _debug(f"[AI-DEBUG] Cleaning up {len(ai_videos)} AI temp videos...")
+            for tmp_path in ai_videos.values():
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
 
 
     t = threading.Thread(target=_run, daemon=True)
