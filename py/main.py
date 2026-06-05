@@ -277,7 +277,7 @@ def video_generate():
         if ai.get("enabled") and ai.get("api_key"):
             ai_provider = None
             try:
-                ai_provider = get_provider(ai.get("service", "seedance"))
+                ai_provider = get_provider(ai.get("service", "doubao"))
             except AIServiceError:
                 pass
 
