@@ -52,6 +52,8 @@ class VideoTask:
         W, H = int(res_parts[0]), int(res_parts[1])
         inner_W = max(int(W * content_scale), 64)
         inner_H = max(int(H * content_scale), 64)
+        # Logo 缩放到画面宽度的 8%（最小值 48px），只占一小角
+        logo_max_w = max(int(W * 0.08), 48)
 
         # 提前计算总时长（后面多次用到）
         xfade_dur = 0.5 if transition != "none" else 0.0
@@ -148,7 +150,7 @@ class VideoTask:
         # ④ 将前景（rgba，透明填充区域会露底）叠加到背景上
         filter_parts.append(f"[bg]{fg_label}overlay=0:0[comp]")
 
-        # ⑤ Logo 叠加
+        # ⑤ Logo 叠加（缩放到画面宽度 8%，只占一小角）
         if logo_idx >= 0:
             logo_pos = logo.get("position", "top-right")
             logo_effect = logo.get("effect", "static")
@@ -158,6 +160,7 @@ class VideoTask:
                 filter_parts.append(
                     f"[{logo_idx}:v]loop=loop=-1:size=1:start=0,"
                     f"trim=duration={total_duration},setpts=PTS-STARTPTS,"
+                    f"scale={logo_max_w}:-1:force_original_aspect_ratio=decrease,"
                     f"format=rgba,"
                     f"fade=t=in:st=0:d=1,fade=t=out:st={total_duration-1}:d=1[l]"
                 )
@@ -166,6 +169,7 @@ class VideoTask:
                 filter_parts.append(
                     f"[{logo_idx}:v]loop=loop=-1:size=1:start=0,"
                     f"trim=duration={total_duration},setpts=PTS-STARTPTS,"
+                    f"scale={logo_max_w}:-1:force_original_aspect_ratio=decrease,"
                     f"format=rgba[l]"
                 )
                 if logo_effect == "bounce":
