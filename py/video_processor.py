@@ -52,8 +52,8 @@ class VideoTask:
         W, H = int(res_parts[0]), int(res_parts[1])
         inner_W = max(int(W * content_scale), 64)
         inner_H = max(int(H * content_scale), 64)
-        # Logo 缩放到画面宽度的 8%（最小值 48px），只占一小角
-        logo_max_w = max(int(W * 0.08), 48)
+        # Logo 缩放到画面宽度的 12%（最小值 60px），只占一小角
+        logo_max_w = max(int(W * 0.12), 60)
 
         # 提前计算总时长（后面多次用到）
         xfade_dur = 0.5 if transition != "none" else 0.0
