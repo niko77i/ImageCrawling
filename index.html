@@ -64,6 +64,7 @@
                     <label for="videoDir">📂 选择图片目录</label>
                     <div style="display:flex;gap:8px;">
                         <input type="text" id="videoDir" placeholder="例如：F:\images\google_ads\com.spotify.music" style="flex:1;" />
+                        <button type="button" onclick="browseFolder()" style="width:44px;padding:10px;" title="选择文件夹">📂</button>
                         <button id="scanDirBtn" onclick="scanDirectory()" style="width:auto;padding:12px 20px;">🔍 扫描</button>
                     </div>
                     <span class="hint">选择已爬取的包名文件夹（包含 PNG 图片和 包logo 子目录）</span>

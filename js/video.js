@@ -46,6 +46,21 @@ async function browseSave() {
     }
 }
 
+async function browseFolder() {
+    try {
+        var resp = await fetch(API_BASE + "/api/browse-folder", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+        });
+        var data = await resp.json();
+        if (data.success && data.path) {
+            document.getElementById("videoDir").value = data.path;
+        }
+    } catch (err) {
+        console.error("文件夹选择失败:", err);
+    }
+}
+
 // ---- 背景颜色行显示/隐藏 ----
 
 function toggleBgColorRow() {

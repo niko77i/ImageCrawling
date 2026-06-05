@@ -1,4 +1,5 @@
 import os
+import subprocess
 import sys
 import webbrowser
 
@@ -338,51 +339,99 @@ def video_progress():
 # ---------- 文件浏览 API ----------
 
 
+def _powershell_file_dialog(filter_str: str, title: str = "选择文件") -> str | None:
+    """通过 PowerShell 打开 Windows 原生文件对话框，返回选中路径。"""
+    ps = f'''
+Add-Type -AssemblyName System.Windows.Forms
+$d = New-Object System.Windows.Forms.OpenFileDialog
+$d.Title = "{title}"
+$d.Filter = "{filter_str}"
+if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ $d.FileName }}
+'''
+    try:
+        out = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps],
+            capture_output=True, text=True, timeout=120,
+        )
+        path = out.stdout.strip()
+        return path if path else None
+    except Exception:
+        return None
+
+
+def _powershell_save_dialog(title: str = "保存文件") -> str | None:
+    """通过 PowerShell 打开 Windows 原生保存文件对话框。"""
+    ps = f'''
+Add-Type -AssemblyName System.Windows.Forms
+$d = New-Object System.Windows.Forms.SaveFileDialog
+$d.Title = "{title}"
+$d.Filter = "MP4 文件 (*.mp4)|*.mp4|所有文件 (*.*)|*.*"
+$d.DefaultExt = ".mp4"
+if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ $d.FileName }}
+'''
+    try:
+        out = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps],
+            capture_output=True, text=True, timeout=120,
+        )
+        path = out.stdout.strip()
+        return path if path else None
+    except Exception:
+        return None
+
+
+def _powershell_folder_dialog(title: str = "选择文件夹") -> str | None:
+    """通过 PowerShell 打开 Windows 原生选择文件夹对话框。"""
+    ps = f'''
+Add-Type -AssemblyName System.Windows.Forms
+$d = New-Object System.Windows.Forms.FolderBrowserDialog
+$d.Description = "{title}"
+if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ $d.SelectedPath }}
+'''
+    try:
+        out = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps],
+            capture_output=True, text=True, timeout=120,
+        )
+        path = out.stdout.strip()
+        return path if path else None
+    except Exception:
+        return None
+
+
 @app.route("/api/browse-file", methods=["POST"])
 def browse_file():
     """打开本地文件选择对话框，返回选中路径。"""
     data = request.get_json(silent=True) or {}
     file_type = data.get("type", "all")
 
-    filters = {
-        "mp3": [("MP3 文件", "*.mp3"), ("所有文件", "*.*")],
-        "image": [("图片文件", "*.png;*.jpg;*.jpeg;*.bmp"), ("所有文件", "*.*")],
-        "all": [("所有文件", "*.*")],
+    filters_map = {
+        "mp3": "MP3 文件|*.mp3|所有文件|*.*",
+        "image": "图片文件|*.png;*.jpg;*.jpeg;*.bmp|所有文件|*.*",
+        "all": "所有文件|*.*",
     }
-    try:
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes("-topmost", True)
-        path = filedialog.askopenfilename(
-            title="选择文件",
-            filetypes=filters.get(file_type, filters["all"]),
-        )
-        root.destroy()
-        return jsonify({"success": True, "path": path.replace("\\", "/") if path else ""})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+    path = _powershell_file_dialog(filters_map.get(file_type, filters_map["all"]))
+    if path:
+        return jsonify({"success": True, "path": path.replace("\\", "/")})
+    return jsonify({"success": True, "path": ""})
 
 
 @app.route("/api/browse-save", methods=["POST"])
 def browse_save():
-    """打开本地文件保存对话框，返回选中路径。"""
-    try:
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes("-topmost", True)
-        path = filedialog.asksaveasfilename(
-            title="保存视频",
-            defaultextension=".mp4",
-            filetypes=[("MP4 文件", "*.mp4"), ("所有文件", "*.*")],
-        )
-        root.destroy()
-        return jsonify({"success": True, "path": path.replace("\\", "/") if path else ""})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+    """打开文件保存对话框。"""
+    path = _powershell_save_dialog()
+    if path:
+        return jsonify({"success": True, "path": path.replace("\\", "/")})
+    return jsonify({"success": True, "path": ""})
+
+
+@app.route("/api/browse-folder", methods=["POST"])
+def browse_folder():
+    """打开文件夹选择对话框。"""
+    path = _powershell_folder_dialog()
+    if path:
+        return jsonify({"success": True, "path": path.replace("\\", "/")})
+    return jsonify({"success": True, "path": ""})
 
 
 # ---------- 启动 ----------
