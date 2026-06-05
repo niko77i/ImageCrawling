@@ -70,7 +70,7 @@ class VideoTask:
 
         # 第二步：xfade 转场链
         if len(images) == 1:
-            prev_label = "v0"
+            prev_label = "[v0]"
             total_duration = duration_per_frame
         else:
             offset = 0.0
@@ -89,7 +89,7 @@ class VideoTask:
                     f"{input_a}{input_b}xfade=transition={transition}:"
                     f"duration={xfade_dur}:offset={offset}{out_label}"
                 )
-            prev_label = f"f{len(images) - 2}"
+            prev_label = f"[f{len(images) - 2}]"
             total_duration = offset + duration_per_frame
 
         # 第三步：Logo 叠加（如果有）
