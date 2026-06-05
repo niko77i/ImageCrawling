@@ -322,6 +322,7 @@ async function startGenerate() {
             service: document.getElementById("aiService").value,
             api_key: document.getElementById("aiApiKey").value.trim(),
             duration: parseInt(document.getElementById("aiDuration").value),
+            prompt: (document.getElementById("aiPrompt").value || "").trim() || null,
         } : { enabled: false },
         settings: {
             duration_per_frame: parseInt(document.getElementById("frameDuration").value),

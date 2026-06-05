@@ -293,32 +293,48 @@ def video_generate():
             if ai_provider:
                 duration = int(ai.get("duration", 4))
                 api_key = ai["api_key"]
+                custom_prompt = ai.get("prompt") or None
                 ai_videos = {}
-                # AI 视频保存目录（与输出视频同目录，加上 _ai_videos 子目录）
+                # AI 视频保存目录
                 ai_output_dir = os.path.join(os.path.dirname(output_path) or ".", "_ai_videos")
-                _debug(f"[AI-DEBUG] AI video output dir: {ai_output_dir}")
-                for idx, img_path in enumerate(images):
-                    _debug(f"\n[AI-DEBUG] [{idx+1}/{len(images)}] generate_video({img_path}, duration={duration})")
-                    task.message = f"AI 动态化: {idx + 1}/{len(images)}"
-                    task.progress = idx / len(images) * 0.5
+                os.makedirs(ai_output_dir, exist_ok=True)
+                import shutil
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+                _debug(f"[AI-DEBUG] AI video output dir: {ai_output_dir}, parallel: max 3 threads")
+
+                # 并行生成 AI 视频（最多 3 个并发）
+                def _gen_one(idx, img_path):
+                    _debug(f"[AI-DEBUG] [{idx+1}/{len(images)}] generate_video({img_path})")
                     try:
-                        ai_video = ai_provider.generate_video(img_path, duration, api_key)
-                        # 保存到输出目录，不删除
-                        os.makedirs(ai_output_dir, exist_ok=True)
-                        import shutil
+                        # 每个线程创建独立的 provider 实例
+                        provider = get_provider(ai.get("service", "doubao"))
+                        ai_video = provider.generate_video(img_path, duration, api_key, custom_prompt)
                         basename = os.path.splitext(os.path.basename(img_path))[0]
                         saved_path = os.path.join(ai_output_dir, f"{basename}_ai.mp4")
                         shutil.copy2(ai_video, saved_path)
-                        # 用保存后的路径替换临时路径
-                        ai_videos[img_path] = saved_path
-                        _debug(f"[AI-DEBUG] [{idx+1}/{len(images)}] SUCCESS -> saved: {saved_path}")
-                        task.message = f"AI 动态化: {idx + 1}/{len(images)} 完成"
+                        _debug(f"[AI-DEBUG] [{idx+1}/{len(images)}] SUCCESS -> {saved_path}")
+                        return (idx, img_path, saved_path, None)
                     except AIServiceError as e:
                         _debug(f"[AI-DEBUG] [{idx+1}/{len(images)}] AIServiceError: {e}")
-                        task.message = f"AI 动态化: {idx + 1}/{len(images)} 失败({e})，降级为静态帧"
+                        return (idx, img_path, None, str(e))
                     except Exception as e:
-                        _debug(f"[AI-DEBUG] [{idx+1}/{len(images)}] UNEXPECTED ERROR: {type(e).__name__}: {e}")
-                        task.message = f"AI 动态化: {idx + 1}/{len(images)} 异常({e})"
+                        _debug(f"[AI-DEBUG] [{idx+1}/{len(images)}] ERROR: {type(e).__name__}: {e}")
+                        return (idx, img_path, None, str(e))
+
+                task.message = f"AI 动态化: 并行生成 {len(images)} 段视频..."
+                with ThreadPoolExecutor(max_workers=min(len(images), 3)) as executor:
+                    futures = {executor.submit(_gen_one, i, p): i for i, p in enumerate(images)}
+                    completed = 0
+                    for future in as_completed(futures):
+                        idx, img_path, saved_path, err = future.result()
+                        completed += 1
+                        task.progress = completed / len(images) * 0.5
+                        if saved_path:
+                            ai_videos[img_path] = saved_path
+                            task.message = f"AI 动态化: {completed}/{len(images)} 完成"
+                        else:
+                            task.message = f"AI 动态化: {completed}/{len(images)} (1 段降级)"
+
                 task.params["_ai_videos"] = ai_videos
             else:
                 _debug(f"[AI-DEBUG] ai_provider is None, skipping AI")
