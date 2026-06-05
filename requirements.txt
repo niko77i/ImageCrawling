@@ -3,3 +3,4 @@ flask-cors>=4.0
 requests>=2.31
 beautifulsoup4>=4.12
 Pillow>=10.0
+volcengine-python-sdk>=1.0

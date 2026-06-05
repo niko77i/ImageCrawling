@@ -192,120 +192,118 @@ class VeoProvider(AIProvider):
 
 
 class DoubaoProvider(AIProvider):
-    """豆包 Seedance 1.5 Pro — 通过火山方舟 Ark API 调用。
+    """豆包 Seedance 1.5 Pro — 通过火山方舟 Ark SDK 调用。
 
     模型: doubao-seedance-1-5-pro-251215
+    图片通过 data URI (base64) 内嵌传输，无需托管到公网。
     参考: https://www.volcengine.com/docs/82379/1521675
     """
 
     BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
     MODEL = "doubao-seedance-1-5-pro-251215"
+    MIN_WIDTH = 300
+    MAX_DATA_KB = 2048  # 图片太大则压缩
 
     def generate_video(self, image_path: str, duration: int, api_key: str) -> str:
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        }
+        try:
+            from volcenginesdkarkruntime import Ark
+        except ImportError:
+            raise AIServiceError(
+                "豆包 Seedance 需要 volcengine SDK，请运行: pip install 'volcengine-python-sdk[ark]'"
+            )
 
-        # 将本地图片编码为 base64 data URI
+        client = Ark(base_url=self.BASE_URL, api_key=api_key)
+
+        # 将本地图片编码为 data URI（缩放 + 压缩以适应 API 限制）
         data_uri = self._encode_image(image_path)
 
-        # 构建带参数提示词
+        # 中文提示词（效果更好）
         prompt = (
-            f"Generate a smooth cinematic video from this image, "
-            f"with natural camera movement and subtle motion "
-            f"--duration {duration} --camerafixed false --watermark true"
+            f"镜头缓缓推进，画面中的人物和景物自然微动，光影流转，"
+            f"营造电影级氛围感 --duration {duration} --camerafixed false --watermark true"
         )
 
         # Step 1: 提交生成任务
-        task_id = self._create_task(prompt, data_uri, headers)
+        try:
+            create_result = client.content_generation.tasks.create(
+                model=self.MODEL,
+                content=[
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": data_uri}},
+                ],
+            )
+            task_id = create_result.id
+        except Exception as e:
+            raise AIServiceError(f"豆包 Seedance 创建任务失败: {e}")
 
         # Step 2: 轮询直到完成
-        video_url = self._poll_task(task_id, headers)
-
-        # Step 3: 下载视频到临时目录
-        return self._download_video(video_url)
-
-    def _encode_image(self, image_path: str) -> str:
-        """将本地图片编码为 base64 data URI。"""
-        with open(image_path, "rb") as f:
-            img_data = base64.b64encode(f.read()).decode("utf-8")
-        ext = os.path.splitext(image_path)[1].lower().lstrip(".")
-        mime_map = {"png": "png", "jpg": "jpeg", "jpeg": "jpeg", "gif": "gif", "webp": "webp"}
-        mime = mime_map.get(ext, "png")
-        return f"data:image/{mime};base64,{img_data}"
-
-    def _create_task(self, prompt: str, data_uri: str, headers: dict) -> str:
-        """提交视频生成任务，返回 task_id。"""
-        url = f"{self.BASE_URL}/content_generation/tasks"
-        body = {
-            "model": self.MODEL,
-            "content": [
-                {"type": "text", "text": prompt},
-                {"type": "image_url", "image_url": {"url": data_uri}},
-            ],
-        }
-        try:
-            resp = requests.post(url, headers=headers, json=body, timeout=30)
-            data = resp.json()
-            if resp.status_code != 200:
-                err = data.get("error", {})
-                if isinstance(err, dict):
-                    err = err.get("message", str(err))
-                raise AIServiceError(f"豆包 Seedance 创建任务失败: {err}")
-            task_id = data.get("id")
-            if not task_id:
-                raise AIServiceError(f"豆包 Seedance 返回格式异常: {data}")
-            return task_id
-        except requests.RequestException as e:
-            raise AIServiceError(f"豆包 Seedance 网络错误: {e}")
-
-    def _poll_task(self, task_id: str, headers: dict, timeout: int = 600) -> str:
-        """轮询任务状态，返回视频下载 URL。"""
-        url = f"{self.BASE_URL}/content_generation/tasks/{task_id}"
         start = time.time()
+        timeout = 900  # 15 分钟超时
         while time.time() - start < timeout:
             try:
-                resp = requests.get(url, headers=headers, timeout=15)
-                data = resp.json()
-                status = data.get("status", "")
-                if status == "succeeded":
-                    video_url = self._extract_video_url(data)
-                    if not video_url:
-                        raise AIServiceError("豆包 Seedance 任务完成但缺少视频 URL")
-                    return video_url
-                elif status in ("failed", "cancelled", "error"):
-                    err = data.get("error", {})
-                    if isinstance(err, dict):
-                        err = err.get("message", str(err))
-                    raise AIServiceError(f"豆包 Seedance 任务失败: {err}")
-            except requests.RequestException:
-                pass  # 网络抖动，继续轮询
-            time.sleep(3)
-        raise AIServiceError("豆包 Seedance 任务超时")
+                get_result = client.content_generation.tasks.get(task_id=task_id)
+            except Exception as e:
+                raise AIServiceError(f"豆包 Seedance 查询状态失败: {e}")
 
-    def _extract_video_url(self, data: dict) -> str | None:
-        """从响应中提取视频 URL，兼容多种返回格式。"""
-        # 格式 1: 顶层 video_url/output_url 字段
-        for key in ("video_url", "output_url", "url"):
-            val = data.get(key)
-            if val and isinstance(val, str) and val.startswith("http"):
-                return val
-        # 格式 2: content 数组中的 video_url 类型
-        content = data.get("content", [])
-        for item in content:
-            if item.get("type") == "video_url":
-                vu = item.get("video_url", {})
-                if isinstance(vu, dict):
-                    val = vu.get("url")
-                    if val and isinstance(val, str) and val.startswith("http"):
-                        return val
-        return None
+            status = get_result.status
+            if status == "succeeded":
+                # 从 content.video_url 提取视频 URL
+                content = getattr(get_result, "content", None)
+                video_url = None
+                if content and hasattr(content, "video_url"):
+                    video_url = content.video_url
+                elif isinstance(content, dict):
+                    video_url = content.get("video_url")
+                if not video_url:
+                    raise AIServiceError("豆包 Seedance 任务完成但缺少视频 URL")
+                # 下载视频
+                return self._download_video(video_url)
+
+            elif status in ("failed", "cancelled", "error"):
+                err = getattr(get_result, "error", None)
+                err_msg = str(err) if err else status
+                raise AIServiceError(f"豆包 Seedance 任务失败: {err_msg}")
+
+            time.sleep(3)
+        raise AIServiceError("豆包 Seedance 任务超时（15 分钟）")
+
+    def _encode_image(self, image_path: str) -> str:
+        """将本地图片编码为适合 API 的 data URI。
+        要求: 宽度 ≥300px，payload ≤2MB。
+        """
+        from io import BytesIO
+        try:
+            from PIL import Image
+        except ImportError:
+            # 无 PIL，直接 base64 原图
+            with open(image_path, "rb") as f:
+                return f"data:image/png;base64,{base64.b64encode(f.read()).decode()}"
+
+        img = Image.open(image_path).convert("RGB")
+        w, h = img.size
+
+        # 确保最小宽度 300px
+        if w < self.MIN_WIDTH:
+            ratio = self.MIN_WIDTH / w
+            img = img.resize((self.MIN_WIDTH, int(h * ratio)), Image.LANCZOS)
+            w, h = img.size
+
+        # JPEG 编码，逐步降质量直到 ≤ MAX_DATA_KB
+        quality = 90
+        while quality >= 40:
+            buf = BytesIO()
+            img.save(buf, format="JPEG", quality=quality)
+            size_kb = buf.tell() // 1024
+            if size_kb <= self.MAX_DATA_KB:
+                break
+            quality -= 15
+        data_uri = f"data:image/jpeg;base64,{base64.b64encode(buf.getvalue()).decode()}"
+        return data_uri
 
     def _download_video(self, video_url: str) -> str:
         """下载视频到临时文件，返回本地路径。"""
         try:
-            resp = requests.get(video_url, timeout=120, stream=True)
+            resp = requests.get(video_url, timeout=180, stream=True)
             resp.raise_for_status()
             fd, tmp_path = tempfile.mkstemp(suffix=".mp4", prefix="doubao_ai_")
             with os.fdopen(fd, "wb") as f:
