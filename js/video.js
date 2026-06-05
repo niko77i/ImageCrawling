@@ -191,6 +191,10 @@ async function startGenerate() {
         alert("请输入输出路径");
         return;
     }
+    // 自动补全 .mp4 扩展名
+    if (!outputPath.toLowerCase().endsWith(".mp4")) {
+        outputPath = outputPath + ".mp4";
+    }
 
     // 获取选中的图片路径
     var selectedPaths = videoState.images
