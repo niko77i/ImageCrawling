@@ -144,6 +144,28 @@
                 <!-- 视频设置 -->
                 <div class="settings-section" style="margin-top:20px;">
                     <h3 style="margin-bottom:12px;">⚙️ 视频设置</h3>
+                    <!-- 背景图片 -->
+                    <div class="form-group">
+                        <label>🖼️ 背景图片（可选）</label>
+                        <input type="text" id="bgImagePath" placeholder="留空则使用纯色背景（例如：F:\bg\frame.png）" oninput="toggleBgColorRow()" />
+                        <span class="hint">用作视频底层的背景图/框架，不选则自动生成纯色背景</span>
+                    </div>
+                    <div class="settings-row" id="bgColorRow">
+                        <div class="form-group">
+                            <label>背景颜色</label>
+                            <input type="color" id="bgColor" value="#1a1a2e" style="height:38px;padding:2px 4px;cursor:pointer;" />
+                        </div>
+                        <div class="form-group">
+                            <label>内容缩放</label>
+                            <select id="contentScale">
+                                <option value="0.70">70% — 宽边框</option>
+                                <option value="0.82" selected>82% — 适中</option>
+                                <option value="0.92">92% — 窄边框</option>
+                                <option value="1.00">100% — 无边框</option>
+                            </select>
+                        </div>
+                    </div>
+
                     <div class="settings-row">
                         <div class="form-group">
                             <label>单帧时长</label>

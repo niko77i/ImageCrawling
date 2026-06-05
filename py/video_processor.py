@@ -26,7 +26,15 @@ class VideoTask:
     # ---------- 公开 API ----------
 
     def build_command(self) -> list[str]:
-        """构建完整的 FFmpeg 命令（滤镜链方式，单命令输出）。"""
+        """构建完整的 FFmpeg 命令（滤镜链方式，单命令输出）。
+
+        滤镜链结构：
+          背景层 → [bg]
+          图片 → 缩放+透明填充 → xfade链 → [fg]
+          [bg][fg] overlay → [comp]
+          Logo 叠加 → [outv]
+          音频 → [aout]
+        """
         images = self.params["images"]
         settings = self.params["settings"]
         logo = self.params.get("logo")
@@ -34,47 +42,93 @@ class VideoTask:
         duration_per_frame = int(settings.get("duration_per_frame", 3))
         resolution = settings.get("resolution", "1920:1080")
         output_path = settings["output_path"]
+        background_path = settings.get("background_path")
+        background_color = settings.get("background_color", "1a1a2e")
+        content_scale = float(settings.get("content_scale", 0.82))
         ffmpeg = self._ffmpeg_path()
+
+        # 解析分辨率
+        res_parts = resolution.split(":")
+        W, H = int(res_parts[0]), int(res_parts[1])
+        inner_W = max(int(W * content_scale), 64)
+        inner_H = max(int(H * content_scale), 64)
+
+        # 提前计算总时长（后面多次用到）
+        xfade_dur = 0.5 if transition != "none" else 0.0
+        if len(images) == 1:
+            total_duration = float(duration_per_frame)
+        else:
+            total_duration = (len(images) - 1) * (duration_per_frame - xfade_dur) + duration_per_frame
 
         cmd = [ffmpeg, "-y"]
 
-        # 输入：每张图片
+        # ---- 输入排序 ----
+        # 0: 背景图片（如果有；没有就用 color 滤镜生成）
+        # 1..N: 内容图片
+        # N+1: Logo（如果有）
+        # N+2: 音乐（如果有）
+
+        has_bg_image = bool(background_path and os.path.isfile(background_path))
+        next_idx = 0
+
+        if has_bg_image:
+            cmd += ["-loop", "1", "-i", background_path.replace("\\", "/")]
+            bg_src = f"[{next_idx}:v]"
+            next_idx += 1
+        else:
+            bg_src = None  # 用 color 滤镜生成
+
+        img_start = next_idx
         for img_path in images:
             cmd += ["-loop", "1", "-i", img_path.replace("\\", "/")]
+            next_idx += 1
 
-        # 输入：Logo（如果有）
-        logo_input_idx = len(images)
+        logo_idx = -1
         if logo and logo.get("path") and os.path.isfile(logo["path"]):
+            logo_idx = next_idx
             cmd += ["-loop", "1", "-i", logo["path"].replace("\\", "/")]
-        else:
-            logo_input_idx = -1
+            next_idx += 1
 
-        # 输入：背景音乐（如果有）
         music_path = settings.get("music_path")
         has_music = bool(music_path and os.path.isfile(music_path))
-        music_input_idx = len(images) + (1 if logo_input_idx >= 0 else 0)
+        music_idx = next_idx if has_music else -1
         if has_music:
             cmd += ["-i", music_path.replace("\\", "/")]
 
-        # 构建滤镜图
+        # ---- 滤镜图 ----
         filter_parts = []
-        total_duration = 0.0
 
-        # 第一步：每张图片 → 标准化视频流 [v0], [v1], ...
-        for i in range(len(images)):
+        # ① 背景 → [bg]（rgba 格式，统一用 alpha 通道）
+        if bg_src is not None:
             filter_parts.append(
-                f"[{i}:v]loop=loop=-1:size=1:start=0,trim=duration={duration_per_frame},"
-                f"setpts=PTS-STARTPTS,scale={resolution}:force_original_aspect_ratio=decrease,"
-                f"pad={resolution}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30[v{i}]"
+                f"{bg_src}loop=loop=-1:size=1:start=0,"
+                f"trim=duration={total_duration},setpts=PTS-STARTPTS,"
+                f"scale={W}:{H}:force_original_aspect_ratio=increase,"
+                f"crop={W}:{H},format=rgba[bg]"
+            )
+        else:
+            filter_parts.append(
+                f"color=c=0x{background_color}:s={W}x{H}:r=30,"
+                f"format=rgba,trim=duration={total_duration}[bg]"
             )
 
-        # 第二步：xfade 转场链
+        # ② 内容图片 → 缩放到 inner_W×inner_H → 透明填充到 W×H → [v0],[v1],...
+        for i in range(len(images)):
+            idx = img_start + i
+            filter_parts.append(
+                f"[{idx}:v]loop=loop=-1:size=1:start=0,"
+                f"trim=duration={duration_per_frame},setpts=PTS-STARTPTS,"
+                f"scale={inner_W}:{inner_H}:force_original_aspect_ratio=decrease,"
+                f"format=rgba,"
+                f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:color=black@0,"
+                f"setsar=1,fps=30[v{i}]"
+            )
+
+        # ③ xfade 转场链（rgba 格式，alpha 会被保留）
         if len(images) == 1:
-            prev_label = "[v0]"
-            total_duration = duration_per_frame
+            fg_label = "[v0]"
         else:
             offset = 0.0
-            xfade_dur = 0.5 if transition != "none" else 0.0
             for i in range(len(images) - 1):
                 if i == 0:
                     input_a = "[v0]"
@@ -89,38 +143,44 @@ class VideoTask:
                     f"{input_a}{input_b}xfade=transition={transition}:"
                     f"duration={xfade_dur}:offset={offset}{out_label}"
                 )
-            prev_label = f"[f{len(images) - 2}]"
-            total_duration = offset + duration_per_frame
+            fg_label = f"[f{len(images) - 2}]"
 
-        # 第三步：Logo 叠加（如果有）
-        if logo_input_idx >= 0:
+        # ④ 将前景（rgba，透明填充区域会露底）叠加到背景上
+        filter_parts.append(f"[bg]{fg_label}overlay=0:0[comp]")
+
+        # ⑤ Logo 叠加
+        if logo_idx >= 0:
             logo_pos = logo.get("position", "top-right")
             logo_effect = logo.get("effect", "static")
             overlay_expr = self._logo_overlay(logo_pos)
 
             if logo_effect == "fade":
                 filter_parts.append(
-                    f"[{logo_input_idx}:v]loop=loop=-1:size=1:start=0,"
+                    f"[{logo_idx}:v]loop=loop=-1:size=1:start=0,"
                     f"trim=duration={total_duration},setpts=PTS-STARTPTS,"
+                    f"format=rgba,"
                     f"fade=t=in:st=0:d=1,fade=t=out:st={total_duration-1}:d=1[l]"
                 )
-                filter_parts.append(f"{prev_label}[l]overlay={overlay_expr}[outv]")
+                filter_parts.append(f"[comp][l]overlay={overlay_expr}[pre_out]")
             else:
                 filter_parts.append(
-                    f"[{logo_input_idx}:v]loop=loop=-1:size=1:start=0,"
-                    f"trim=duration={total_duration},setpts=PTS-STARTPTS[l]"
+                    f"[{logo_idx}:v]loop=loop=-1:size=1:start=0,"
+                    f"trim=duration={total_duration},setpts=PTS-STARTPTS,"
+                    f"format=rgba[l]"
                 )
                 if logo_effect == "bounce":
                     overlay_expr = self._logo_overlay("floating")
-                filter_parts.append(f"{prev_label}[l]overlay={overlay_expr}[outv]")
-            video_out = "[outv]"
-        else:
-            video_out = prev_label if len(images) == 1 else f"[f{len(images) - 2}]"
+                filter_parts.append(f"[comp][l]overlay={overlay_expr}[pre_out]")
 
-        # 第四步：音频处理
+            # 转 yuv 准备编码
+            filter_parts.append(f"[pre_out]format=yuv420p[outv]")
+        else:
+            filter_parts.append(f"[comp]format=yuv420p[outv]")
+
+        # ⑥ 音频
         if has_music:
             filter_parts.append(
-                f"[{music_input_idx}:a]volume=0.3,aloop=loop=-1:size=2e+09,"
+                f"[{music_idx}:a]volume=0.3,aloop=loop=-1:size=2e+09,"
                 f"atrim=duration={total_duration}[aout]"
             )
             audio_map = "[aout]"
@@ -130,17 +190,17 @@ class VideoTask:
             )
             audio_map = "[s]"
 
-        # 组装完整滤镜
+        # ---- 组装 ----
         filter_complex = ";".join(filter_parts)
         cmd += ["-filter_complex", filter_complex]
-        cmd += ["-map", video_out, "-map", audio_map]
+        cmd += ["-map", "[outv]", "-map", audio_map]
         cmd += ["-c:v", "libx264", "-preset", "medium", "-crf", "18"]
         cmd += ["-pix_fmt", "yuv420p"]
         cmd += ["-shortest"]
         cmd += [output_path.replace("\\", "/")]
 
         self._total_duration = total_duration
-        self._cmd = cmd  # 保存命令用于调试
+        self._cmd = cmd
         return cmd
 
     def run(self):

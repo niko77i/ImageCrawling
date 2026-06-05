@@ -12,6 +12,21 @@ var videoState = {
     pollTimer: null,
 };
 
+// ---- 背景颜色行显示/隐藏 ----
+
+function toggleBgColorRow() {
+    var bgPath = document.getElementById("bgImagePath").value.trim();
+    var row = document.getElementById("bgColorRow");
+    if (bgPath) {
+        // 选了背景图片就隐藏颜色选择器
+        row.style.opacity = "0.4";
+        row.style.pointerEvents = "none";
+    } else {
+        row.style.opacity = "1";
+        row.style.pointerEvents = "";
+    }
+}
+
 // ---- 目录扫描 ----
 
 async function scanDirectory() {
@@ -213,6 +228,9 @@ async function startGenerate() {
     var useLogo = document.getElementById("useLogo").checked;
     var useAI = document.getElementById("useAI").checked;
     var musicPath = document.getElementById("musicPath").value.trim();
+    var bgImagePath = document.getElementById("bgImagePath").value.trim();
+    var bgColor = document.getElementById("bgColor").value.replace("#", "");
+    var contentScale = parseFloat(document.getElementById("contentScale").value);
 
     var body = {
         images: selectedPaths,
@@ -233,6 +251,9 @@ async function startGenerate() {
             music_path: musicPath || null,
             resolution: document.getElementById("resolution").value,
             output_path: outputPath,
+            background_path: bgImagePath || null,
+            background_color: bgColor || "1a1a2e",
+            content_scale: contentScale,
         },
     };
 
