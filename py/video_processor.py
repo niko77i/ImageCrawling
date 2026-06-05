@@ -140,6 +140,7 @@ class VideoTask:
         cmd += [output_path.replace("\\", "/")]
 
         self._total_duration = total_duration
+        self._cmd = cmd  # 保存命令用于调试
         return cmd
 
     def run(self):
@@ -147,6 +148,7 @@ class VideoTask:
         cmd = self.build_command()
         self.status = "processing"
         self.message = "正在启动 FFmpeg..."
+        self._stderr_lines = []  # 收集 stderr 用于错误诊断
 
         try:
             self._proc = subprocess.Popen(
@@ -158,6 +160,7 @@ class VideoTask:
                 errors="replace",
             )
             for line in self._proc.stderr:
+                self._stderr_lines.append(line)
                 self._parse_progress(line)
             self._proc.wait()
 
@@ -173,8 +176,15 @@ class VideoTask:
                     "duration_s": round(self._total_duration, 1),
                 }
             else:
+                # 提取 FFmpeg 最后几行错误信息
+                stderr_tail = "".join(self._stderr_lines[-8:]) if self._stderr_lines else "(无输出)"
+                cmd_str = " ".join(getattr(self, '_cmd', []))
                 self.status = "error"
-                self.message = f"FFmpeg 返回错误码 {self._proc.returncode}"
+                self.message = (
+                    f"FFmpeg 返回错误码 {self._proc.returncode}。\n"
+                    f"命令: {cmd_str[:300]}...\n"
+                    f"stderr: {stderr_tail}"
+                )
         except FileNotFoundError:
             self.status = "error"
             self.message = "未找到 FFmpeg，请确认 ffmpeg.exe 在系统 PATH 中或与程序在同一目录"
