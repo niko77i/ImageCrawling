@@ -349,39 +349,6 @@ def video_generate():
         if ai_videos:
             _debug(f"[AI-DEBUG] AI videos saved, NOT deleted. Count: {len(ai_videos)}")
 
-        # ---- AI 文案叠加（第二遍 FFmpeg） ----
-        texts = [t.strip() for t in (settings.get("texts") or []) if t.strip()]
-        if texts and task.status == "completed" and (ai.get("api_key") or True):
-            _debug(f"[AI-DEBUG] AI text overlay: {len(texts)} texts, using LLM to design...")
-            task.message = "AI 设计文案叠加参数..."
-            try:
-                from ai_text_overlay import _ask_llm_design_text, apply_text_overlay
-                res_str = settings.get("resolution", "1080:1920")
-                res = res_str.split(":")
-                vw, vh = int(res[0]), int(res[1])
-                total_dur = task._total_duration
-
-                # LLM 设计参数（有 API Key 时调用 LLM，否则用回退方案）
-                api_key = ai.get("api_key")
-                if api_key:
-                    design = _ask_llm_design_text(texts, vw, vh, total_dur, api_key)
-                else:
-                    from ai_text_overlay import _fallback_design
-                    design = _fallback_design(texts, vw, vh, total_dur)
-
-                # 第二遍 FFmpeg 叠加文字
-                tmp_output = output_path + ".tmp.mp4"
-                ffmpeg_path = _get_ffmpeg_path()
-                apply_text_overlay(output_path, tmp_output, design, total_dur, ffmpeg_path)
-
-                # 替换原视频
-                import shutil
-                shutil.move(tmp_output, output_path)
-                _debug(f"[AI-DEBUG] AI text overlay applied, final video: {output_path}")
-                task.message = "AI 文案叠加完成"
-            except Exception as e:
-                _debug(f"[AI-DEBUG] AI text overlay failed: {e}, keeping original video")
-                task.message = f"AI 文案叠加失败({e})，已保留原始视频"
 
     t = threading.Thread(target=_run, daemon=True)
     t.start()
