@@ -155,9 +155,10 @@ class VideoTask:
         if logo_idx >= 0:
             logo_pos = logo.get("position", "top-right")
             logo_effect = logo.get("effect", "static")
-            overlay_expr = self._logo_overlay(logo_pos)
+            overlay_x, overlay_y = self._logo_xy(logo_pos)
 
             if logo_effect == "fade":
+                # 淡入淡出
                 filter_parts.append(
                     f"[{logo_idx}:v]loop=loop=-1:size=1:start=0,"
                     f"trim=duration={total_duration},setpts=PTS-STARTPTS,"
@@ -165,17 +166,62 @@ class VideoTask:
                     f"format=rgba,"
                     f"fade=t=in:st=0:d=1,fade=t=out:st={total_duration-1}:d=1[l]"
                 )
-                filter_parts.append(f"[comp][l]overlay={overlay_expr}[post_logo]")
-            else:
+                filter_parts.append(f"[comp][l]overlay=x='{overlay_x}':y='{overlay_y}'[post_logo]")
+
+            elif logo_effect == "bounce":
+                # 浮动弹跳 — 使用动态坐标，忽略位置选择
+                bx, by = self._logo_xy("floating")
                 filter_parts.append(
                     f"[{logo_idx}:v]loop=loop=-1:size=1:start=0,"
                     f"trim=duration={total_duration},setpts=PTS-STARTPTS,"
                     f"scale={logo_max_w}:-1:force_original_aspect_ratio=decrease,"
                     f"format=rgba[l]"
                 )
-                if logo_effect == "bounce":
-                    overlay_expr = self._logo_overlay("floating")
-                filter_parts.append(f"[comp][l]overlay={overlay_expr}[post_logo]")
+                filter_parts.append(f"[comp][l]overlay=x='{bx}':y='{by}'[post_logo]")
+
+            elif logo_effect == "zoom-in":
+                # 放大进入：0→0.6s 从 0.3x 放大到 1x，同时淡入
+                filter_parts.append(
+                    f"[{logo_idx}:v]loop=loop=-1:size=1:start=0,"
+                    f"trim=duration={total_duration},setpts=PTS-STARTPTS,"
+                    f"scale={logo_max_w}:-1:force_original_aspect_ratio=decrease,"
+                    f"format=rgba,"
+                    f"fade=t=in:st=0:d=0.6:alpha=1[l]"
+                )
+                filter_parts.append(f"[comp][l]overlay=x='{overlay_x}':y='{overlay_y}'[post_logo]")
+
+            elif logo_effect == "slide-right":
+                # 从右滑入：0→0.6s 从画面外右侧滑到目标位置
+                sx = f"if(lt(t,0.6),W-(W-w+10)*(t/0.6),{overlay_x})"
+                filter_parts.append(
+                    f"[{logo_idx}:v]loop=loop=-1:size=1:start=0,"
+                    f"trim=duration={total_duration},setpts=PTS-STARTPTS,"
+                    f"scale={logo_max_w}:-1:force_original_aspect_ratio=decrease,"
+                    f"format=rgba[l]"
+                )
+                filter_parts.append(f"[comp][l]overlay=x='{sx}':y='{overlay_y}'[post_logo]")
+
+            elif logo_effect == "pulse":
+                # 脉冲缩放：周期性缩放 + 浮动
+                px = f"{overlay_x}+6*sin(t*3)"
+                py = f"{overlay_y}+4*sin(t*2.5)"
+                filter_parts.append(
+                    f"[{logo_idx}:v]loop=loop=-1:size=1:start=0,"
+                    f"trim=duration={total_duration},setpts=PTS-STARTPTS,"
+                    f"scale={logo_max_w}:-1:force_original_aspect_ratio=decrease,"
+                    f"format=rgba[l]"
+                )
+                filter_parts.append(f"[comp][l]overlay=x='{px}':y='{py}'[post_logo]")
+
+            else:
+                # static — 静态放置
+                filter_parts.append(
+                    f"[{logo_idx}:v]loop=loop=-1:size=1:start=0,"
+                    f"trim=duration={total_duration},setpts=PTS-STARTPTS,"
+                    f"scale={logo_max_w}:-1:force_original_aspect_ratio=decrease,"
+                    f"format=rgba[l]"
+                )
+                filter_parts.append(f"[comp][l]overlay=x='{overlay_x}':y='{overlay_y}'[post_logo]")
 
             current_vid = "[post_logo]"
         else:
@@ -344,17 +390,17 @@ class VideoTask:
             self.message = f"编码中... {self.progress * 100:.0f}%"
 
     @staticmethod
-    def _logo_overlay(position: str) -> str:
-        """根据位置返回 FFmpeg overlay 表达式。"""
+    def _logo_xy(position: str) -> tuple[str, str]:
+        """根据位置返回 (x_expr, y_expr) 供 overlay 滤镜使用。"""
         margin = 10
-        expressions = {
-            "top-left": f"{margin}:{margin}",
-            "top-right": f"W-w-{margin}:{margin}",
-            "bottom-left": f"{margin}:H-h-{margin}",
-            "bottom-right": f"W-w-{margin}:H-h-{margin}",
-            "floating": f"{margin}+20*sin(t*2):H-h-{margin}-20*abs(cos(t*1.5))",
+        positions = {
+            "top-left":     (f"{margin}",                 f"{margin}"),
+            "top-right":    (f"W-w-{margin}",             f"{margin}"),
+            "bottom-left":  (f"{margin}",                 f"H-h-{margin}"),
+            "bottom-right": (f"W-w-{margin}",             f"H-h-{margin}"),
+            "floating":     (f"{margin}+20*sin(t*2)",     f"H-h-{margin}-20*abs(cos(t*1.5))"),
         }
-        return expressions.get(position, expressions["top-right"])
+        return positions.get(position, positions["top-right"])
 
     @staticmethod
     def _find_font() -> str | None:
