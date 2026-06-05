@@ -123,7 +123,7 @@ def _fallback_design(texts: list[str], video_w: int, video_h: int, duration: flo
 
 
 def apply_text_overlay(input_video: str, output_video: str, design: dict,
-                       ffmpeg_path: str = "ffmpeg") -> str:
+                       duration: float, ffmpeg_path: str = "ffmpeg") -> str:
     """用 FFmpeg 将 AI 设计的文字叠加到视频上。"""
     texts = design.get("texts", [])
     if not texts:

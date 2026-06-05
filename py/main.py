@@ -372,7 +372,7 @@ def video_generate():
                 # 第二遍 FFmpeg 叠加文字
                 tmp_output = output_path + ".tmp.mp4"
                 ffmpeg_path = _get_ffmpeg_path()
-                apply_text_overlay(output_path, tmp_output, design, ffmpeg_path)
+                apply_text_overlay(output_path, tmp_output, design, total_dur, ffmpeg_path)
 
                 # 替换原视频
                 import shutil
