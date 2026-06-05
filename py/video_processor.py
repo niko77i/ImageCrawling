@@ -1,5 +1,6 @@
 """视频处理模块 — FFmpeg 滤镜链构建与子进程执行。"""
 import os
+import random
 import re
 import subprocess
 import uuid
@@ -150,7 +151,7 @@ class VideoTask:
         # ④ 将前景（rgba，透明填充区域会露底）叠加到背景上
         filter_parts.append(f"[bg]{fg_label}overlay=0:0[comp]")
 
-        # ⑤ Logo 叠加（缩放到画面宽度 8%，只占一小角）
+        # ⑤ Logo 叠加（缩放到画面宽度 16%）
         if logo_idx >= 0:
             logo_pos = logo.get("position", "top-right")
             logo_effect = logo.get("effect", "static")
@@ -164,7 +165,7 @@ class VideoTask:
                     f"format=rgba,"
                     f"fade=t=in:st=0:d=1,fade=t=out:st={total_duration-1}:d=1[l]"
                 )
-                filter_parts.append(f"[comp][l]overlay={overlay_expr}[pre_out]")
+                filter_parts.append(f"[comp][l]overlay={overlay_expr}[post_logo]")
             else:
                 filter_parts.append(
                     f"[{logo_idx}:v]loop=loop=-1:size=1:start=0,"
@@ -174,14 +175,64 @@ class VideoTask:
                 )
                 if logo_effect == "bounce":
                     overlay_expr = self._logo_overlay("floating")
-                filter_parts.append(f"[comp][l]overlay={overlay_expr}[pre_out]")
+                filter_parts.append(f"[comp][l]overlay={overlay_expr}[post_logo]")
 
-            # 转 yuv 准备编码
-            filter_parts.append(f"[pre_out]format=yuv420p[outv]")
+            current_vid = "[post_logo]"
         else:
-            filter_parts.append(f"[comp]format=yuv420p[outv]")
+            current_vid = "[comp]"
 
-        # ⑥ 音频
+        # ⑥ 文案浮层（最多两条，随机浮现 2-3 秒，艺术字效果）
+        texts = [t.strip() for t in (settings.get("texts") or []) if t.strip()]
+        if texts:
+            font_file = self._find_font()
+            if font_file:
+                # 用文案内容 hash 做随机种子，保证可复现
+                seed = sum(ord(c) for c in texts[0]) + len(texts[0])
+                rng = random.Random(seed)
+                # 字号按短边的 6% 计算（9:16 竖屏约 65px）
+                font_size = max(int(min(W, H) * 0.06), 36)
+
+                for ti, text in enumerate(texts[:2]):
+                    # 随机开始时间（避开开头 1s 和结尾 3s）
+                    max_start = max(0.0, total_duration - 3.0)
+                    if max_start > 1.0:
+                        start_t = round(rng.uniform(1.0, max_start), 2)
+                    else:
+                        start_t = 1.0
+                    disp_dur = round(rng.uniform(2.0, 3.0), 1)
+
+                    # 位置：第一条靠上，第二条靠下
+                    y_expr = f"h*0.13" if ti == 0 else f"h*0.75"
+
+                    # alpha 表达式：淡入 0.3s + 停留 + 淡出 0.3s
+                    fade_dur = 0.3
+                    alpha = (
+                        f"if(lt(t,{start_t}),0,"
+                        f"if(lt(t,{start_t}+{fade_dur}),(t-{start_t})/{fade_dur},"
+                        f"if(lt(t,{start_t}+{disp_dur}-{fade_dur}),1,"
+                        f"if(lt(t,{start_t}+{disp_dur}),({start_t}+{disp_dur}-t)/{fade_dur},0))))"
+                    )
+
+                    escaped = text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
+                    out_label = f"[txt{ti}]"
+                    filter_parts.append(
+                        f"{current_vid}drawtext="
+                        f"fontfile={font_file}:"
+                        f"text='{escaped}':"
+                        f"fontsize={font_size}:"
+                        f"fontcolor=white:"
+                        f"shadowcolor=black@0.7:shadowx=3:shadowy=3:"
+                        f"borderw=2:bordercolor=black@0.4:"
+                        f"alpha='{alpha}':"
+                        f"x=(w-text_w)/2:y={y_expr}"
+                        f"{out_label}"
+                    )
+                    current_vid = out_label
+
+        # ⑦ 转 yuv 准备编码
+        filter_parts.append(f"{current_vid}format=yuv420p[outv]")
+
+        # ⑧ 音频
         if has_music:
             filter_parts.append(
                 f"[{music_idx}:a]volume=0.3,aloop=loop=-1:size=2e+09,"
@@ -295,3 +346,22 @@ class VideoTask:
             "floating": f"{margin}+20*sin(t*2):H-h-{margin}-20*abs(cos(t*1.5))",
         }
         return expressions.get(position, expressions["top-right"])
+
+    @staticmethod
+    def _find_font() -> str | None:
+        """查找可用中文字体文件（Windows），返回正斜杠路径供 FFmpeg 使用。"""
+        font_dir = r"C:\Windows\Fonts"
+        candidates = [
+            os.path.join(font_dir, "simhei.ttf"),       # 黑体 — 粗壮醒目
+            os.path.join(font_dir, "msyh.ttc"),         # 微软雅黑 — 现代
+            os.path.join(font_dir, "simsun.ttc"),        # 宋体 — 回退
+        ]
+        for p in candidates:
+            if os.path.isfile(p):
+                # 去掉盘符避免冒号（FFmpeg 用 : 分隔选项名值对）
+                # C:\Windows\Fonts\simhei.ttf → /Windows/Fonts/simhei.ttf
+                path = p.replace("\\", "/")
+                if ":" in path:
+                    path = path.split(":", 1)[1]  # 去掉 C:
+                return path
+        return None

@@ -231,6 +231,11 @@ async function startGenerate() {
     var bgImagePath = document.getElementById("bgImagePath").value.trim();
     var bgColor = document.getElementById("bgColor").value.replace("#", "");
     var contentScale = parseFloat(document.getElementById("contentScale").value);
+    var text1 = document.getElementById("textOverlay1").value.trim();
+    var text2 = document.getElementById("textOverlay2").value.trim();
+    var texts = [];
+    if (text1) texts.push(text1);
+    if (text2) texts.push(text2);
 
     var body = {
         images: selectedPaths,
@@ -254,6 +259,7 @@ async function startGenerate() {
             background_path: bgImagePath || null,
             background_color: bgColor || "1a1a2e",
             content_scale: contentScale,
+            texts: texts,
         },
     };
 
