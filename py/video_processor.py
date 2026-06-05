@@ -82,9 +82,16 @@ class VideoTask:
         else:
             bg_src = None  # 用 color 滤镜生成
 
+        # AI 视频替换：如果有 AI 生成的视频，用它替代原始图片
+        ai_videos = self.params.get("_ai_videos") or {}
         img_start = next_idx
         for img_path in images:
-            cmd += ["-loop", "1", "-i", img_path.replace("\\", "/")]
+            ai_path = ai_videos.get(img_path)
+            if ai_path and os.path.isfile(ai_path):
+                # 用 AI 视频作为输入（无需 loop）
+                cmd += ["-i", ai_path.replace("\\", "/")]
+            else:
+                cmd += ["-loop", "1", "-i", img_path.replace("\\", "/")]
             next_idx += 1
 
         logo_idx = -1
@@ -116,17 +123,28 @@ class VideoTask:
                 f"format=rgba,trim=duration={total_duration}[bg]"
             )
 
-        # ② 内容图片 → 缩放到 inner_W×inner_H → 透明填充到 W×H → [v0],[v1],...
+        # ② 内容图片/AI视频 → 缩放到 inner_W×inner_H → 透明填充到 W×H → [v0],[v1],...
         for i in range(len(images)):
             idx = img_start + i
-            filter_parts.append(
-                f"[{idx}:v]loop=loop=-1:size=1:start=0,"
-                f"trim=duration={duration_per_frame},setpts=PTS-STARTPTS,"
-                f"scale={inner_W}:{inner_H}:force_original_aspect_ratio=decrease,"
-                f"format=rgba,"
-                f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:color=black@0,"
-                f"setsar=1,fps=30[v{i}]"
-            )
+            img_path = images[i]
+            if ai_videos.get(img_path):
+                # AI 视频：无需 loop，直接 trim + scale + pad
+                filter_parts.append(
+                    f"[{idx}:v]trim=duration={duration_per_frame},setpts=PTS-STARTPTS,"
+                    f"scale={inner_W}:{inner_H}:force_original_aspect_ratio=decrease,"
+                    f"format=rgba,"
+                    f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:color=black@0,"
+                    f"setsar=1,fps=30[v{i}]"
+                )
+            else:
+                filter_parts.append(
+                    f"[{idx}:v]loop=loop=-1:size=1:start=0,"
+                    f"trim=duration={duration_per_frame},setpts=PTS-STARTPTS,"
+                    f"scale={inner_W}:{inner_H}:force_original_aspect_ratio=decrease,"
+                    f"format=rgba,"
+                    f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:color=black@0,"
+                    f"setsar=1,fps=30[v{i}]"
+                )
 
         # ③ 转场链（xfade）或直接拼接（concat，无转场时）
         if len(images) == 1:
