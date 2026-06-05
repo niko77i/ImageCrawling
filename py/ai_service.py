@@ -1,10 +1,12 @@
-"""AI 图片转视频服务 — 抽象接口 + Seedance/Veo/Atlas Provider。
+"""AI 图片转视频服务 — 抽象接口 + Seedance/Veo/Atlas/Doubao Provider。
 
 Provider 选择:
 - seedance: 通过 Atlas Cloud 调用 Seedance 2.0（每日 225 免费积分，图转视频最佳）
+- doubao: 豆包 Seedance 1.5 Pro（火山方舟 Ark API，效果最新）
 - veo: Google Veo 3.1 Lite（完全免费，视频自带音频）
 - atlas: Atlas Cloud 统一网关，可切换多个后端
 """
+import base64
 import os
 import time
 import tempfile
@@ -189,6 +191,131 @@ class VeoProvider(AIProvider):
             raise AIServiceError(f"Veo 下载视频失败: {e}")
 
 
+class DoubaoProvider(AIProvider):
+    """豆包 Seedance 1.5 Pro — 通过火山方舟 Ark API 调用。
+
+    模型: doubao-seedance-1-5-pro-251215
+    参考: https://www.volcengine.com/docs/82379/1521675
+    """
+
+    BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
+    MODEL = "doubao-seedance-1-5-pro-251215"
+
+    def generate_video(self, image_path: str, duration: int, api_key: str) -> str:
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+
+        # 将本地图片编码为 base64 data URI
+        data_uri = self._encode_image(image_path)
+
+        # 构建带参数提示词
+        prompt = (
+            f"Generate a smooth cinematic video from this image, "
+            f"with natural camera movement and subtle motion "
+            f"--duration {duration} --camerafixed false --watermark true"
+        )
+
+        # Step 1: 提交生成任务
+        task_id = self._create_task(prompt, data_uri, headers)
+
+        # Step 2: 轮询直到完成
+        video_url = self._poll_task(task_id, headers)
+
+        # Step 3: 下载视频到临时目录
+        return self._download_video(video_url)
+
+    def _encode_image(self, image_path: str) -> str:
+        """将本地图片编码为 base64 data URI。"""
+        with open(image_path, "rb") as f:
+            img_data = base64.b64encode(f.read()).decode("utf-8")
+        ext = os.path.splitext(image_path)[1].lower().lstrip(".")
+        mime_map = {"png": "png", "jpg": "jpeg", "jpeg": "jpeg", "gif": "gif", "webp": "webp"}
+        mime = mime_map.get(ext, "png")
+        return f"data:image/{mime};base64,{img_data}"
+
+    def _create_task(self, prompt: str, data_uri: str, headers: dict) -> str:
+        """提交视频生成任务，返回 task_id。"""
+        url = f"{self.BASE_URL}/content_generation/tasks"
+        body = {
+            "model": self.MODEL,
+            "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": data_uri}},
+            ],
+        }
+        try:
+            resp = requests.post(url, headers=headers, json=body, timeout=30)
+            data = resp.json()
+            if resp.status_code != 200:
+                err = data.get("error", {})
+                if isinstance(err, dict):
+                    err = err.get("message", str(err))
+                raise AIServiceError(f"豆包 Seedance 创建任务失败: {err}")
+            task_id = data.get("id")
+            if not task_id:
+                raise AIServiceError(f"豆包 Seedance 返回格式异常: {data}")
+            return task_id
+        except requests.RequestException as e:
+            raise AIServiceError(f"豆包 Seedance 网络错误: {e}")
+
+    def _poll_task(self, task_id: str, headers: dict, timeout: int = 600) -> str:
+        """轮询任务状态，返回视频下载 URL。"""
+        url = f"{self.BASE_URL}/content_generation/tasks/{task_id}"
+        start = time.time()
+        while time.time() - start < timeout:
+            try:
+                resp = requests.get(url, headers=headers, timeout=15)
+                data = resp.json()
+                status = data.get("status", "")
+                if status == "succeeded":
+                    video_url = self._extract_video_url(data)
+                    if not video_url:
+                        raise AIServiceError("豆包 Seedance 任务完成但缺少视频 URL")
+                    return video_url
+                elif status in ("failed", "cancelled", "error"):
+                    err = data.get("error", {})
+                    if isinstance(err, dict):
+                        err = err.get("message", str(err))
+                    raise AIServiceError(f"豆包 Seedance 任务失败: {err}")
+            except requests.RequestException:
+                pass  # 网络抖动，继续轮询
+            time.sleep(3)
+        raise AIServiceError("豆包 Seedance 任务超时")
+
+    def _extract_video_url(self, data: dict) -> str | None:
+        """从响应中提取视频 URL，兼容多种返回格式。"""
+        # 格式 1: 顶层 video_url/output_url 字段
+        for key in ("video_url", "output_url", "url"):
+            val = data.get(key)
+            if val and isinstance(val, str) and val.startswith("http"):
+                return val
+        # 格式 2: content 数组中的 video_url 类型
+        content = data.get("content", [])
+        for item in content:
+            if item.get("type") == "video_url":
+                vu = item.get("video_url", {})
+                if isinstance(vu, dict):
+                    val = vu.get("url")
+                    if val and isinstance(val, str) and val.startswith("http"):
+                        return val
+        return None
+
+    def _download_video(self, video_url: str) -> str:
+        """下载视频到临时文件，返回本地路径。"""
+        try:
+            resp = requests.get(video_url, timeout=120, stream=True)
+            resp.raise_for_status()
+            fd, tmp_path = tempfile.mkstemp(suffix=".mp4", prefix="doubao_ai_")
+            with os.fdopen(fd, "wb") as f:
+                for chunk in resp.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            return tmp_path
+        except requests.RequestException as e:
+            raise AIServiceError(f"豆包 Seedance 下载视频失败: {e}")
+
+
 # 服务注册表
 # 注意: "seedance" 和 "atlas" 共用 AtlasProvider，seedance 使用默认模型 seedance-2.0
 class SeedanceProvider(AtlasProvider):
@@ -199,6 +326,7 @@ class SeedanceProvider(AtlasProvider):
 
 AI_PROVIDERS = {
     "seedance": SeedanceProvider,  # 🥇 推荐：Seedance 2.0（每日 225 免费积分）
+    "doubao": DoubaoProvider,     # 🥇 豆包 Seedance 1.5 Pro（火山方舟）
     "veo": VeoProvider,           # 🥈 备选：Google Veo 3.1 Lite（免费 + 音频）
     "atlas": AtlasProvider,       # Atlas Cloud 多模型网关
 }

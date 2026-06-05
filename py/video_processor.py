@@ -40,12 +40,13 @@ class VideoTask:
         settings = self.params["settings"]
         logo = self.params.get("logo")
         transition = settings.get("transition", "fade")
-        duration_per_frame = int(settings.get("duration_per_frame", 3))
+        duration_per_frame = int(settings.get("duration_per_frame") or 3)
         resolution = settings.get("resolution", "1920:1080")
         output_path = settings["output_path"]
         background_path = settings.get("background_path")
         background_color = settings.get("background_color", "1a1a2e")
-        content_scale = float(settings.get("content_scale", 0.82))
+        _raw_scale = settings.get("content_scale")
+        content_scale = float(_raw_scale if _raw_scale is not None else 0.82)
         ffmpeg = self._ffmpeg_path()
 
         # 解析分辨率
@@ -127,9 +128,16 @@ class VideoTask:
                 f"setsar=1,fps=30[v{i}]"
             )
 
-        # ③ xfade 转场链（rgba 格式，alpha 会被保留）
+        # ③ 转场链（xfade）或直接拼接（concat，无转场时）
         if len(images) == 1:
             fg_label = "[v0]"
+        elif transition == "none":
+            # 无转场 → concat 直接拼接
+            concat_inputs = "".join(f"[v{i}]" for i in range(len(images)))
+            filter_parts.append(
+                f"{concat_inputs}concat=n={len(images)}:v=1:a=0[fg]"
+            )
+            fg_label = "[fg]"
         else:
             offset = 0.0
             for i in range(len(images) - 1):
@@ -268,7 +276,7 @@ class VideoTask:
                         f"if(lt(t,{start_t}+{disp_dur}),({start_t}+{disp_dur}-t)/{fade_dur},0))))"
                     )
 
-                    escaped = text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
+                    escaped = text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'").replace("%", "%%")
                     out_label = f"[txt{ti}]"
                     filter_parts.append(
                         f"{current_vid}drawtext="
@@ -315,12 +323,12 @@ class VideoTask:
 
     def run(self):
         """执行 FFmpeg 命令（阻塞，在独立线程中调用）。"""
-        cmd = self.build_command()
         self.status = "processing"
         self.message = "正在启动 FFmpeg..."
         self._stderr_lines = []  # 收集 stderr 用于错误诊断
 
         try:
+            cmd = self.build_command()
             self._proc = subprocess.Popen(
                 cmd,
                 stderr=subprocess.PIPE,
@@ -404,19 +412,31 @@ class VideoTask:
 
     @staticmethod
     def _find_font() -> str | None:
-        """查找可用中文字体文件（Windows），返回正斜杠路径供 FFmpeg 使用。"""
-        font_dir = r"C:\Windows\Fonts"
-        candidates = [
-            os.path.join(font_dir, "simhei.ttf"),       # 黑体 — 粗壮醒目
-            os.path.join(font_dir, "msyh.ttc"),         # 微软雅黑 — 现代
-            os.path.join(font_dir, "simsun.ttc"),        # 宋体 — 回退
-        ]
+        """查找可用中文字体文件，返回 FFmpeg 可用的路径（冒号转义）。"""
+        import platform
+        system_root = os.environ.get("SystemRoot", r"C:\Windows")
+        if platform.system() == "Windows":
+            font_dir = os.path.join(system_root, "Fonts")
+            candidates = [
+                os.path.join(font_dir, "simhei.ttf"),       # 黑体 — 粗壮醒目
+                os.path.join(font_dir, "msyh.ttc"),         # 微软雅黑 — 现代
+                os.path.join(font_dir, "simsun.ttc"),        # 宋体 — 回退
+            ]
+        else:
+            # macOS / Linux 常见中文字体路径
+            candidates = [
+                "/System/Library/Fonts/PingFang.ttc",
+                "/System/Library/Fonts/STHeiti Light.ttc",
+                "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+                "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+                "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            ]
         for p in candidates:
             if os.path.isfile(p):
-                # 去掉盘符避免冒号（FFmpeg 用 : 分隔选项名值对）
-                # C:\Windows\Fonts\simhei.ttf → /Windows/Fonts/simhei.ttf
+                # FFmpeg 用 : 分隔选项名值对，盘符冒号无法安全转义
+                # 直接去掉盘符，C:/Windows/Fonts/simhei.ttf → /Windows/Fonts/simhei.ttf
                 path = p.replace("\\", "/")
-                if ":" in path:
-                    path = path.split(":", 1)[1]  # 去掉 C:
+                if len(path) > 2 and path[1] == ":":
+                    path = path[2:]
                 return path
         return None

@@ -339,6 +339,12 @@ def video_progress():
 # ---------- 文件浏览 API ----------
 
 
+def _is_local_request() -> bool:
+    """检查请求是否来自本机（防止远程触发文件对话框）。"""
+    remote_addr = request.remote_addr or ""
+    return remote_addr in ("127.0.0.1", "::1", "localhost")
+
+
 def _powershell_file_dialog(filter_str: str, title: str = "选择文件") -> str | None:
     """通过 PowerShell 打开 Windows 原生文件对话框，返回选中路径。"""
     ps = f'''
@@ -402,6 +408,8 @@ if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ $d.SelectedP
 @app.route("/api/browse-file", methods=["POST"])
 def browse_file():
     """打开本地文件选择对话框，返回选中路径。"""
+    if not _is_local_request():
+        return jsonify({"success": False, "error": "仅允许本机访问"}), 403
     data = request.get_json(silent=True) or {}
     file_type = data.get("type", "all")
 
@@ -419,6 +427,8 @@ def browse_file():
 @app.route("/api/browse-save", methods=["POST"])
 def browse_save():
     """打开文件保存对话框。"""
+    if not _is_local_request():
+        return jsonify({"success": False, "error": "仅允许本机访问"}), 403
     path = _powershell_save_dialog()
     if path:
         return jsonify({"success": True, "path": path.replace("\\", "/")})
@@ -428,6 +438,8 @@ def browse_save():
 @app.route("/api/browse-folder", methods=["POST"])
 def browse_folder():
     """打开文件夹选择对话框。"""
+    if not _is_local_request():
+        return jsonify({"success": False, "error": "仅允许本机访问"}), 403
     path = _powershell_folder_dialog()
     if path:
         return jsonify({"success": True, "path": path.replace("\\", "/")})

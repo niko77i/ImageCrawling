@@ -15,57 +15,75 @@ var videoState = {
 // ---- 文件浏览按钮 ----
 
 async function browseFile(inputId, fileType) {
+    var inputEl = document.getElementById(inputId);
+    if (!inputEl) return;
     try {
+        var ctrl = new AbortController();
+        var timer = setTimeout(function () { ctrl.abort(); }, 30000);
         var resp = await fetch(API_BASE + "/api/browse-file", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ type: fileType }),
+            signal: ctrl.signal,
         });
+        clearTimeout(timer);
         var data = await resp.json();
         if (data.success && data.path) {
-            document.getElementById(inputId).value = data.path;
+            inputEl.value = data.path;
             if (inputId === "bgImagePath") toggleBgColorRow();
         }
     } catch (err) {
-        console.error("文件选择失败:", err);
+        if (err.name !== "AbortError") console.error("文件选择失败:", err);
     }
 }
 
 async function browseSave() {
     try {
+        var ctrl = new AbortController();
+        var timer = setTimeout(function () { ctrl.abort(); }, 30000);
         var resp = await fetch(API_BASE + "/api/browse-save", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            signal: ctrl.signal,
         });
+        clearTimeout(timer);
         var data = await resp.json();
         if (data.success && data.path) {
-            document.getElementById("outputPath").value = data.path;
+            var outEl = document.getElementById("outputPath");
+            if (outEl) outEl.value = data.path;
         }
     } catch (err) {
-        console.error("保存路径选择失败:", err);
+        if (err.name !== "AbortError") console.error("保存路径选择失败:", err);
     }
 }
 
 async function browseFolder() {
     try {
+        var ctrl = new AbortController();
+        var timer = setTimeout(function () { ctrl.abort(); }, 30000);
         var resp = await fetch(API_BASE + "/api/browse-folder", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            signal: ctrl.signal,
         });
+        clearTimeout(timer);
         var data = await resp.json();
         if (data.success && data.path) {
-            document.getElementById("videoDir").value = data.path;
+            var dirEl = document.getElementById("videoDir");
+            if (dirEl) dirEl.value = data.path;
         }
     } catch (err) {
-        console.error("文件夹选择失败:", err);
+        if (err.name !== "AbortError") console.error("文件夹选择失败:", err);
     }
 }
 
 // ---- 背景颜色行显示/隐藏 ----
 
 function toggleBgColorRow() {
-    var bgPath = document.getElementById("bgImagePath").value.trim();
+    var bgPathEl = document.getElementById("bgImagePath");
     var row = document.getElementById("bgColorRow");
+    if (!bgPathEl || !row) return;
+    var bgPath = bgPathEl.value.trim();
     if (bgPath) {
         // 选了背景图片就隐藏颜色选择器
         row.style.opacity = "0.4";
@@ -277,11 +295,17 @@ async function startGenerate() {
     var useLogo = document.getElementById("useLogo").checked;
     var useAI = document.getElementById("useAI").checked;
     var musicPath = document.getElementById("musicPath").value.trim();
-    var bgImagePath = document.getElementById("bgImagePath").value.trim();
-    var bgColor = document.getElementById("bgColor").value.replace("#", "");
-    var contentScale = parseFloat(document.getElementById("contentScale").value);
-    var text1 = document.getElementById("textOverlay1").value.trim();
-    var text2 = document.getElementById("textOverlay2").value.trim();
+    var bgImagePathEl = document.getElementById("bgImagePath");
+    var bgColorEl = document.getElementById("bgColor");
+    var scaleEl = document.getElementById("contentScale");
+    var text1El = document.getElementById("textOverlay1");
+    var text2El = document.getElementById("textOverlay2");
+
+    var bgImagePath = (bgImagePathEl && bgImagePathEl.value || "").trim();
+    var bgColor = (bgColorEl && bgColorEl.value || "#1a1a2e").replace("#", "");
+    var contentScale = scaleEl ? (parseFloat(scaleEl.value) || 0.82) : 0.82;
+    var text1 = (text1El && text1El.value || "").trim();
+    var text2 = (text2El && text2El.value || "").trim();
     var texts = [];
     if (text1) texts.push(text1);
     if (text2) texts.push(text2);
