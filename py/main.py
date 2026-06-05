@@ -274,37 +274,59 @@ def video_generate():
     def _run():
         # 可选：AI 动态化
         ai = data.get("ai") or {}
+        print(f"\n[AI-DEBUG] ai config: enabled={ai.get('enabled')}, service={ai.get('service', 'doubao')}, key={'***' if ai.get('api_key') else 'MISSING'}, duration={ai.get('duration', 4)}", flush=True)
         if ai.get("enabled") and ai.get("api_key"):
             ai_provider = None
             try:
+                print(f"[AI-DEBUG] get_provider('{ai.get('service', 'doubao')}') ...", flush=True)
                 ai_provider = get_provider(ai.get("service", "doubao"))
+                print(f"[AI-DEBUG] provider created: {type(ai_provider).__name__}", flush=True)
             except AIServiceError as e:
+                print(f"[AI-DEBUG] get_provider FAILED: {e}", flush=True)
                 task.message = f"AI 服务初始化失败: {e}"
 
             if ai_provider:
                 duration = int(ai.get("duration", 4))
                 api_key = ai["api_key"]
                 ai_videos = {}
+                # AI 视频保存目录（与输出视频同目录，加上 _ai_videos 子目录）
+                ai_output_dir = os.path.join(os.path.dirname(output_path) or ".", "_ai_videos")
+                print(f"[AI-DEBUG] AI video output dir: {ai_output_dir}", flush=True)
                 for idx, img_path in enumerate(images):
+                    print(f"\n[AI-DEBUG] [{idx+1}/{len(images)}] generate_video({img_path}, duration={duration})", flush=True)
                     task.message = f"AI 动态化: {idx + 1}/{len(images)}"
                     task.progress = idx / len(images) * 0.5
                     try:
                         ai_video = ai_provider.generate_video(img_path, duration, api_key)
-                        ai_videos[img_path] = ai_video
+                        # 保存到输出目录，不删除
+                        os.makedirs(ai_output_dir, exist_ok=True)
+                        import shutil
+                        basename = os.path.splitext(os.path.basename(img_path))[0]
+                        saved_path = os.path.join(ai_output_dir, f"{basename}_ai.mp4")
+                        shutil.copy2(ai_video, saved_path)
+                        # 用保存后的路径替换临时路径
+                        ai_videos[img_path] = saved_path
+                        print(f"[AI-DEBUG] [{idx+1}/{len(images)}] SUCCESS -> saved: {saved_path}", flush=True)
                         task.message = f"AI 动态化: {idx + 1}/{len(images)} 完成"
                     except AIServiceError as e:
+                        print(f"[AI-DEBUG] [{idx+1}/{len(images)}] AIServiceError: {e}", flush=True)
                         task.message = f"AI 动态化: {idx + 1}/{len(images)} 失败({e})，降级为静态帧"
+                    except Exception as e:
+                        print(f"[AI-DEBUG] [{idx+1}/{len(images)}] UNEXPECTED ERROR: {type(e).__name__}: {e}", flush=True)
+                        task.message = f"AI 动态化: {idx + 1}/{len(images)} 异常({e})"
                 task.params["_ai_videos"] = ai_videos
+            else:
+                print(f"[AI-DEBUG] ai_provider is None, skipping AI", flush=True)
+        else:
+            print(f"[AI-DEBUG] AI not enabled or no API key, skipping", flush=True)
 
         # 执行 FFmpeg
         task.run()
 
-        # 清理 AI 临时文件
-        for tmp_path in task.params.get("_ai_videos", {}).values():
-            try:
-                os.remove(tmp_path)
-            except OSError:
-                pass
+        # AI 视频已保存到 _ai_videos 子目录（与输出视频同级），不删除
+        ai_videos = task.params.get("_ai_videos", {})
+        if ai_videos:
+            print(f"[AI-DEBUG] AI videos saved, NOT deleted. Count: {len(ai_videos)}", flush=True)
 
     t = threading.Thread(target=_run, daemon=True)
     t.start()

@@ -205,25 +205,33 @@ class DoubaoProvider(AIProvider):
     MAX_DATA_KB = 2048  # 图片太大则压缩
 
     def generate_video(self, image_path: str, duration: int, api_key: str) -> str:
+        print(f"  [Doubao] generate_video called: image={image_path}, duration={duration}", flush=True)
         try:
             from volcenginesdkarkruntime import Ark
-        except ImportError:
+            print(f"  [Doubao] Ark SDK imported OK", flush=True)
+        except ImportError as e:
+            print(f"  [Doubao] Ark SDK import FAILED: {e}", flush=True)
             raise AIServiceError(
                 "豆包 Seedance 需要 volcengine SDK，请运行: pip install 'volcengine-python-sdk[ark]'"
             )
 
         client = Ark(base_url=self.BASE_URL, api_key=api_key)
+        print(f"  [Doubao] Ark client created, base_url={self.BASE_URL}", flush=True)
 
         # 将本地图片编码为 data URI（缩放 + 压缩以适应 API 限制）
+        print(f"  [Doubao] Encoding image...", flush=True)
         data_uri = self._encode_image(image_path)
+        print(f"  [Doubao] Data URI size: {len(data_uri)//1024} KB", flush=True)
 
         # 中文提示词（效果更好）
         prompt = (
             f"镜头缓缓推进，画面中的人物和景物自然微动，光影流转，"
             f"营造电影级氛围感 --duration {duration} --camerafixed false --watermark true"
         )
+        print(f"  [Doubao] Prompt: {prompt}", flush=True)
 
         # Step 1: 提交生成任务
+        print(f"  [Doubao] Creating task (model={self.MODEL})...", flush=True)
         try:
             create_result = client.content_generation.tasks.create(
                 model=self.MODEL,
@@ -233,19 +241,29 @@ class DoubaoProvider(AIProvider):
                 ],
             )
             task_id = create_result.id
+            print(f"  [Doubao] Task created: {task_id}", flush=True)
         except Exception as e:
+            print(f"  [Doubao] Create task FAILED: {type(e).__name__}: {e}", flush=True)
             raise AIServiceError(f"豆包 Seedance 创建任务失败: {e}")
 
         # Step 2: 轮询直到完成
+        print(f"  [Doubao] Polling task {task_id}...", flush=True)
         start = time.time()
         timeout = 900  # 15 分钟超时
+        last_status = ""
         while time.time() - start < timeout:
             try:
                 get_result = client.content_generation.tasks.get(task_id=task_id)
             except Exception as e:
+                print(f"  [Doubao] Poll FAILED: {type(e).__name__}: {e}", flush=True)
                 raise AIServiceError(f"豆包 Seedance 查询状态失败: {e}")
 
             status = get_result.status
+            if status != last_status:
+                elapsed = int(time.time() - start)
+                print(f"  [Doubao] [{elapsed}s] Status: {status}", flush=True)
+                last_status = status
+
             if status == "succeeded":
                 # 从 content.video_url 提取视频 URL
                 content = getattr(get_result, "content", None)
@@ -255,16 +273,22 @@ class DoubaoProvider(AIProvider):
                 elif isinstance(content, dict):
                     video_url = content.get("video_url")
                 if not video_url:
+                    print(f"  [Doubao] SUCCEEDED but no video_url! content={content}", flush=True)
                     raise AIServiceError("豆包 Seedance 任务完成但缺少视频 URL")
-                # 下载视频
-                return self._download_video(video_url)
+                print(f"  [Doubao] Video URL: {video_url[:80]}...", flush=True)
+                print(f"  [Doubao] Downloading video...", flush=True)
+                tmp_path = self._download_video(video_url)
+                print(f"  [Doubao] Downloaded: {tmp_path} ({os.path.getsize(tmp_path)/1024:.0f} KB)", flush=True)
+                return tmp_path
 
             elif status in ("failed", "cancelled", "error"):
                 err = getattr(get_result, "error", None)
                 err_msg = str(err) if err else status
+                print(f"  [Doubao] Task FAILED: {err_msg}", flush=True)
                 raise AIServiceError(f"豆包 Seedance 任务失败: {err_msg}")
 
             time.sleep(3)
+        print(f"  [Doubao] Timeout after {timeout}s", flush=True)
         raise AIServiceError("豆包 Seedance 任务超时（15 分钟）")
 
     def _encode_image(self, image_path: str) -> str:
