@@ -1,6 +1,18 @@
 // 使用相对路径，自动适配当前访问地址（本地、局域网、打包后均可用）
 const API_BASE = "";
 
+// ---------- 标签页切换 ----------
+
+function switchTab(tabName) {
+    // 更新导航激活态
+    document.querySelectorAll(".nav-item").forEach((el, i) => {
+        el.classList.toggle("active", (tabName === "scrape" && i === 0) || (tabName === "video" && i === 1));
+    });
+    // 切换面板
+    document.getElementById("panel-scrape").classList.toggle("active", tabName === "scrape");
+    document.getElementById("panel-video").classList.toggle("active", tabName === "video");
+}
+
 function parseUrls(input) {
     // 先按换行分割，再按逗号分割，过滤空字符串
     return input
