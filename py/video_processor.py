@@ -189,8 +189,8 @@ class VideoTask:
                 # 用文案内容 hash 做随机种子，保证可复现
                 seed = sum(ord(c) for c in texts[0]) + len(texts[0])
                 rng = random.Random(seed)
-                # 字号按短边的 6% 计算（9:16 竖屏约 65px）
-                font_size = max(int(min(W, H) * 0.06), 36)
+                # 字号按短边的 8% 计算（1080p 约 86px），加粗描边更清晰
+                font_size = max(int(min(W, H) * 0.08), 48)
 
                 # 预计算所有文案的时间，确保不重叠
                 text_timings = []
@@ -210,8 +210,8 @@ class VideoTask:
 
                 for ti, (start_t, disp_dur) in enumerate(text_timings):
                     text = texts[ti]
-                    # 位置：第一条靠上，第二条靠下
-                    y_expr = f"h*0.13" if ti == 0 else f"h*0.75"
+                    # 位置：第一条中上，第二条中间偏下
+                    y_expr = f"h*0.20" if ti == 0 else f"h*0.50"
 
                     # alpha 表达式：淡入 0.3s + 停留 + 淡出 0.3s
                     fade_dur = 0.3
@@ -230,8 +230,8 @@ class VideoTask:
                         f"text='{escaped}':"
                         f"fontsize={font_size}:"
                         f"fontcolor=white:"
-                        f"shadowcolor=black@0.7:shadowx=3:shadowy=3:"
-                        f"borderw=2:bordercolor=black@0.4:"
+                        f"shadowcolor=black@0.8:shadowx=4:shadowy=4:"
+                        f"borderw=4:bordercolor=black@0.5:"
                         f"alpha='{alpha}':"
                         f"x=(w-text_w)/2:y={y_expr}"
                         f"{out_label}"

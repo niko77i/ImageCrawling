@@ -147,7 +147,10 @@
                     <!-- 背景图片 -->
                     <div class="form-group">
                         <label>🖼️ 背景图片（可选）</label>
-                        <input type="text" id="bgImagePath" placeholder="留空则使用纯色背景（例如：F:\bg\frame.png）" oninput="toggleBgColorRow()" />
+                        <div style="display:flex;gap:6px;">
+                            <input type="text" id="bgImagePath" placeholder="留空则使用纯色背景（例如：F:\bg\frame.png）" oninput="toggleBgColorRow()" style="flex:1;" />
+                            <button type="button" onclick="browseFile('bgImagePath','image')" style="width:44px;padding:10px;" title="选择背景图片">📂</button>
+                        </div>
                         <span class="hint">用作视频底层的背景图/框架，不选则自动生成纯色背景</span>
                     </div>
                     <div class="settings-row" id="bgColorRow">
@@ -193,12 +196,18 @@
                         </div>
                         <div class="form-group">
                             <label>背景音乐（可选 .mp3）</label>
-                            <input type="text" id="musicPath" placeholder="F:\music\bg.mp3（本地路径）" />
+                            <div style="display:flex;gap:6px;">
+                                <input type="text" id="musicPath" placeholder="F:\music\bg.mp3（本地路径）" style="flex:1;" />
+                                <button type="button" onclick="browseFile('musicPath','mp3')" style="width:44px;padding:10px;" title="选择音频文件">📂</button>
+                            </div>
                         </div>
                     </div>
                     <div class="form-group">
                         <label>输出路径</label>
-                        <input type="text" id="outputPath" placeholder="例如：F:\output\video.mp4" />
+                        <div style="display:flex;gap:6px;">
+                            <input type="text" id="outputPath" placeholder="例如：F:\output\video.mp4" style="flex:1;" />
+                            <button type="button" onclick="browseSave()" style="width:44px;padding:10px;" title="选择保存位置">📂</button>
+                        </div>
                         <span class="hint">视频文件保存路径，需包含 .mp4 扩展名</span>
                     </div>
 

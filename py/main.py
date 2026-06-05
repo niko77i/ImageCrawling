@@ -335,6 +335,56 @@ def video_progress():
     return jsonify(resp)
 
 
+# ---------- 文件浏览 API ----------
+
+
+@app.route("/api/browse-file", methods=["POST"])
+def browse_file():
+    """打开本地文件选择对话框，返回选中路径。"""
+    data = request.get_json(silent=True) or {}
+    file_type = data.get("type", "all")
+
+    filters = {
+        "mp3": [("MP3 文件", "*.mp3"), ("所有文件", "*.*")],
+        "image": [("图片文件", "*.png;*.jpg;*.jpeg;*.bmp"), ("所有文件", "*.*")],
+        "all": [("所有文件", "*.*")],
+    }
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        path = filedialog.askopenfilename(
+            title="选择文件",
+            filetypes=filters.get(file_type, filters["all"]),
+        )
+        root.destroy()
+        return jsonify({"success": True, "path": path.replace("\\", "/") if path else ""})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/browse-save", methods=["POST"])
+def browse_save():
+    """打开本地文件保存对话框，返回选中路径。"""
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        path = filedialog.asksaveasfilename(
+            title="保存视频",
+            defaultextension=".mp4",
+            filetypes=[("MP4 文件", "*.mp4"), ("所有文件", "*.*")],
+        )
+        root.destroy()
+        return jsonify({"success": True, "path": path.replace("\\", "/") if path else ""})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 # ---------- 启动 ----------
 
 if __name__ == "__main__":

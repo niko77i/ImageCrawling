@@ -12,6 +12,40 @@ var videoState = {
     pollTimer: null,
 };
 
+// ---- 文件浏览按钮 ----
+
+async function browseFile(inputId, fileType) {
+    try {
+        var resp = await fetch(API_BASE + "/api/browse-file", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ type: fileType }),
+        });
+        var data = await resp.json();
+        if (data.success && data.path) {
+            document.getElementById(inputId).value = data.path;
+            if (inputId === "bgImagePath") toggleBgColorRow();
+        }
+    } catch (err) {
+        console.error("文件选择失败:", err);
+    }
+}
+
+async function browseSave() {
+    try {
+        var resp = await fetch(API_BASE + "/api/browse-save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+        });
+        var data = await resp.json();
+        if (data.success && data.path) {
+            document.getElementById("outputPath").value = data.path;
+        }
+    } catch (err) {
+        console.error("保存路径选择失败:", err);
+    }
+}
+
 // ---- 背景颜色行显示/隐藏 ----
 
 function toggleBgColorRow() {
