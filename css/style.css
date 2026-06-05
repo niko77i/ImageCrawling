@@ -9,6 +9,77 @@ body {
     background: #f5f5f5;
     color: #333;
     line-height: 1.6;
+    display: flex;
+    min-height: 100vh;
+}
+
+/* ========== 侧边栏导航 ========== */
+
+.sidebar {
+    width: 200px;
+    background: #2c3e50;
+    color: #fff;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    padding-top: 20px;
+}
+
+.sidebar-title {
+    padding: 0 16px 16px;
+    font-size: 15px;
+    font-weight: 700;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 8px;
+}
+
+.nav-item {
+    padding: 12px 16px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.15s;
+    border-left: 3px solid transparent;
+    color: rgba(255, 255, 255, 0.7);
+    user-select: none;
+}
+
+.nav-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+}
+
+.nav-item.active {
+    background: rgba(255, 255, 255, 0.12);
+    border-left-color: #4a90d9;
+    color: #fff;
+    font-weight: 600;
+}
+
+/* ========== 主内容区 ========== */
+
+.main-content {
+    flex: 1;
+    padding: 32px;
+    overflow-y: auto;
+    display: flex;
+    justify-content: center;
+}
+
+.tab-panel {
+    display: none;
+    width: 100%;
+    max-width: 760px;
+}
+
+.tab-panel.active {
+    display: block;
+}
+
+.panel-inner {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+    padding: 32px;
 }
 
 .container {
@@ -157,4 +228,163 @@ button:disabled {
 .checkbox-label input[type="checkbox"] {
     width: auto;
     cursor: pointer;
+}
+
+/* ========== 图片网格 ========== */
+
+.image-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.image-card {
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #fff;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    user-select: none;
+}
+
+.image-card.selected {
+    border-color: #4a90d9;
+    background: #f0f4ff;
+}
+
+.image-card .card-img {
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    object-fit: cover;
+    display: block;
+    background: #f0f0f0;
+}
+
+.image-card .card-info {
+    padding: 6px 8px;
+    font-size: 11px;
+}
+
+.image-card .card-info .card-name {
+    font-weight: 600;
+    word-break: break-all;
+}
+
+.image-card .card-info .card-size {
+    color: #888;
+}
+
+.image-card .card-check {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    width: 20px;
+    height: 20px;
+    background: #fff;
+    border: 2px solid #ccc;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: transparent;
+}
+
+.image-card.selected .card-check {
+    background: #4a90d9;
+    border-color: #4a90d9;
+    color: #fff;
+}
+
+.image-card .card-img-wrapper {
+    position: relative;
+}
+
+/* ========== 全选/取消全选 ========== */
+
+.select-all {
+    color: #4a90d9;
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.select-all:hover {
+    text-decoration: underline;
+}
+
+/* ========== 选项区块高亮 ========== */
+
+.option-block {
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+
+.option-block.logo-block {
+    background: #fff8e1;
+    border: 1px solid #ffe082;
+}
+
+.option-block.ai-block {
+    background: #f3e5f5;
+    border: 1px solid #e1bee7;
+}
+
+/* ========== 视频设置行 ========== */
+
+.settings-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.settings-row .form-group {
+    margin-bottom: 12px;
+}
+
+/* ========== 进度条 ========== */
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background: #e0e0e0;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 8px;
+}
+
+.progress-bar .progress-fill {
+    height: 100%;
+    background: #4a90d9;
+    border-radius: 4px;
+    transition: width 0.3s;
+    width: 0%;
+}
+
+/* ========== 折叠区域 ========== */
+
+.collapsible-content {
+    margin-top: 8px;
+    display: none;
+}
+
+.collapsible-content.open {
+    display: block;
+}
+
+/* ========== 响应式 ========== */
+
+@media (max-width: 900px) {
+    .image-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .sidebar {
+        width: 160px;
+    }
+    .settings-row {
+        grid-template-columns: 1fr;
+    }
 }
