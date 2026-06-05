@@ -7,38 +7,196 @@
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-    <div class="container">
-        <h1>🖼️ Google Play 图片爬取工具</h1>
-        <p class="subtitle">批量输入 Google Play 链接，自动爬取并缩放图片至 Google Ads 规格</p>
 
-        <div class="form-group">
-            <label for="urls">📋 Google Play 链接</label>
-            <textarea id="urls" rows="6" placeholder="每行一个链接，或用逗号分隔&#10;例如：&#10;https://play.google.com/store/apps/details?id=com.spotify.music&#10;https://play.google.com/store/apps/details?id=com.whatsapp"></textarea>
-            <span class="hint">支持批量输入，换行或逗号分隔</span>
+    <!-- ========== 侧边栏 ========== -->
+    <nav class="sidebar">
+        <div class="sidebar-title">🖼️ 工具集</div>
+        <div class="nav-item active" onclick="switchTab('scrape')">📥 图片爬取</div>
+        <div class="nav-item" onclick="switchTab('video')">🎬 AI 视频生成</div>
+    </nav>
+
+    <!-- ========== 主内容区 ========== -->
+    <div class="main-content">
+
+        <!-- ===== 爬取面板 ===== -->
+        <div id="panel-scrape" class="tab-panel active">
+            <div class="panel-inner">
+                <h1>🖼️ Google Play 图片爬取工具</h1>
+                <p class="subtitle">批量输入 Google Play 链接，自动爬取并缩放图片至 Google Ads 规格</p>
+
+                <div class="form-group">
+                    <label for="urls">📋 Google Play 链接</label>
+                    <textarea id="urls" rows="6" placeholder="每行一个链接，或用逗号分隔&#10;例如：&#10;https://play.google.com/store/apps/details?id=com.spotify.music&#10;https://play.google.com/store/apps/details?id=com.whatsapp"></textarea>
+                    <span class="hint">支持批量输入，换行或逗号分隔</span>
+                </div>
+
+                <div class="form-group">
+                    <label for="saveDir">💾 保存路径</label>
+                    <input type="text" id="saveDir" placeholder="例如：F:\images\google_ads\" />
+                    <span class="hint">图片将按包名自动创建子文件夹</span>
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="includeAds" checked />
+                        按 Google Ads 规格放大图片
+                    </label>
+                </div>
+
+                <button id="startBtn" onclick="startScrape()">🚀 开始爬取</button>
+
+                <div id="results" class="results">
+                    <h3>📊 处理结果</h3>
+                    <div id="resultList"></div>
+                    <div id="summary" class="summary" style="display:none;"></div>
+                </div>
+            </div>
         </div>
 
-        <div class="form-group">
-            <label for="saveDir">💾 保存路径</label>
-            <input type="text" id="saveDir" placeholder="例如：F:\images\google_ads\" />
-            <span class="hint">图片将按包名自动创建子文件夹</span>
+        <!-- ===== 视频面板 ===== -->
+        <div id="panel-video" class="tab-panel">
+            <div class="panel-inner">
+                <h1>🎬 AI 视频生成</h1>
+                <p class="subtitle">从已爬取的图片生成视频，可选 Logo 水印与 AI 动态效果</p>
+
+                <!-- 选择目录 -->
+                <div class="form-group">
+                    <label for="videoDir">📂 选择图片目录</label>
+                    <div style="display:flex;gap:8px;">
+                        <input type="text" id="videoDir" placeholder="例如：F:\images\google_ads\com.spotify.music" style="flex:1;" />
+                        <button id="scanDirBtn" onclick="scanDirectory()" style="width:auto;padding:12px 20px;">🔍 扫描</button>
+                    </div>
+                    <span class="hint">选择已爬取的包名文件夹（包含 PNG 图片和 包logo 子目录）</span>
+                </div>
+
+                <!-- 图片列表 -->
+                <div id="imageListSection" class="form-group" style="display:none;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;">
+                        <label>🖼️ 图片列表（共 <span id="imageCount">0</span> 张）</label>
+                        <span class="select-all" onclick="toggleSelectAll()">☑ 全选</span>
+                    </div>
+                    <div id="imageGrid" class="image-grid"></div>
+                </div>
+
+                <!-- Logo 叠加 -->
+                <div id="logoSection" class="form-group option-block logo-block" style="display:none;">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="useLogo" onchange="toggleLogoOptions()" />
+                        🏷️ Logo 叠加 — 检测到: <span id="logoFileName" style="color:#888;"></span>
+                    </label>
+                    <div id="logoOptions" class="collapsible-content">
+                        <div class="settings-row" style="margin-top:8px;">
+                            <div class="form-group">
+                                <label>位置</label>
+                                <select id="logoPosition">
+                                    <option value="top-right">右上</option>
+                                    <option value="top-left">左上</option>
+                                    <option value="bottom-left">左下</option>
+                                    <option value="bottom-right">右下</option>
+                                    <option value="floating">浮动</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>效果</label>
+                                <select id="logoEffect">
+                                    <option value="static">静态</option>
+                                    <option value="fade">淡入淡出</option>
+                                    <option value="bounce">浮动弹跳</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI 动态化 -->
+                <div class="form-group option-block ai-block">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="useAI" onchange="toggleAIOptions()" />
+                        🤖 使用 AI 将静态图片转为短视频（可选，需 API Key）
+                    </label>
+                    <div id="aiOptions" class="collapsible-content">
+                        <div class="settings-row" style="margin-top:8px;">
+                            <div class="form-group">
+                                <label>API 服务</label>
+                                <select id="aiService">
+                                    <option value="seedance">Seedance 2.0（推荐 · 每日免费）</option>
+                                    <option value="veo">Veo 3.1 Lite（免费 · 自带音频）</option>
+                                    <option value="atlas">Atlas Cloud（多模型网关）</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>每段时长（秒）</label>
+                                <select id="aiDuration">
+                                    <option value="3">3</option>
+                                    <option value="4" selected>4</option>
+                                    <option value="5">5</option>
+                                    <option value="8">8（仅 Veo）</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>API Key</label>
+                            <input type="password" id="aiApiKey" placeholder="输入 API Key（Seedance 注册即送每日 225 积分）" />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 视频设置 -->
+                <div class="settings-section" style="margin-top:20px;">
+                    <h3 style="margin-bottom:12px;">⚙️ 视频设置</h3>
+                    <div class="settings-row">
+                        <div class="form-group">
+                            <label>单帧时长</label>
+                            <select id="frameDuration">
+                                <option value="3" selected>3 秒</option>
+                                <option value="4">4 秒</option>
+                                <option value="5">5 秒</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>转场效果</label>
+                            <select id="transition">
+                                <option value="fade" selected>淡入淡出</option>
+                                <option value="slideright">滑动</option>
+                                <option value="zoomin">缩放</option>
+                                <option value="none">无</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>输出分辨率</label>
+                            <select id="resolution">
+                                <option value="1920:1080" selected>1080p (1920×1080)</option>
+                                <option value="1280:720">720p (1280×720)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>背景音乐（可选 .mp3）</label>
+                            <input type="text" id="musicPath" placeholder="F:\music\bg.mp3（本地路径）" />
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>输出路径</label>
+                        <input type="text" id="outputPath" placeholder="例如：F:\output\video.mp4" />
+                        <span class="hint">视频文件保存路径，需包含 .mp4 扩展名</span>
+                    </div>
+                </div>
+
+                <!-- 生成按钮 -->
+                <button id="generateBtn" onclick="startGenerate()">🎬 生成视频</button>
+
+                <!-- 进度与结果 -->
+                <div id="videoProgress" class="results" style="display:none;">
+                    <h3>⏳ 生成进度</h3>
+                    <div id="videoStatus"></div>
+                    <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+                    <div id="videoResult" style="display:none;"></div>
+                </div>
+            </div>
         </div>
 
-        <div class="form-group checkbox-group">
-            <label class="checkbox-label">
-                <input type="checkbox" id="includeAds" checked />
-                按 Google Ads 规格放大图片
-            </label>
-        </div>
-
-        <button id="startBtn" onclick="startScrape()">🚀 开始爬取</button>
-
-        <div id="results" class="results">
-            <h3>📊 处理结果</h3>
-            <div id="resultList"></div>
-            <div id="summary" class="summary" style="display:none;"></div>
-        </div>
     </div>
 
     <script src="js/app.js"></script>
+    <script src="js/video.js"></script>
 </body>
 </html>
