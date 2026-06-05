@@ -3,15 +3,15 @@
 ## 实现状态
 
 - [x] Task 1: CSS 侧边栏 + 视频面板样式 ✅
-- [ ] Task 2: HTML 侧边栏 + 双面板结构
-- [ ] Task 3: JS switchTab() 函数
-- [ ] Task 4: video_processor.py
-- [ ] Task 5: ai_service.py（Seedance/Veo/Atlas）
-- [ ] Task 6: main.py API 路由
-- [ ] Task 7: video.js 视频面板逻辑
-- [ ] Task 8: 端到端验证
+- [x] Task 2: HTML 侧边栏 + 双面板结构 ✅
+- [x] Task 3: JS switchTab() 函数 ✅
+- [x] Task 4: video_processor.py ✅
+- [x] Task 5: ai_service.py（Seedance/Veo/Atlas）✅
+- [x] Task 6: main.py API 路由 ✅
+- [x] Task 7: video.js 视频面板逻辑 ✅
+- [x] Task 8: 端到端验证 ✅（服务器启动正常，API 响应正常）
 - [ ] Task 9: 下载 FFmpeg + 打包 EXE
-- [ ] Task 10: 更新 CLAUDE.md
+- [x] Task 10: 更新 CLAUDE.md ✅
 
 ---
 

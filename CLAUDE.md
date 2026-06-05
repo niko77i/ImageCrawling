@@ -162,3 +162,44 @@ from .scraper import scrape_images
 - 项目无自动化测试，测试通过 curl 调用 API 和手动操作前端完成
 - 完整设计文档见 `docs/superpowers/specs/`，实现计划见 `docs/superpowers/plans/`
 - 本机存在两个 Python 环境：`/f/niko/python/`（有项目依赖）和 `C:\Users\Niko\AppData\Local\Programs\Python\Python312\`（系统默认），打包 EXE 时必须用前者
+
+## AI 视频生成（2026-06-05 新增）
+
+### 功能概述
+- 左侧侧边栏导航：📥 图片爬取 / 🎬 AI 视频生成 两个标签页
+- 视频生成流程：选择目录 → 扫描图片（缩略图网格预览）→ 勾选 → 设置参数 → 生成 MP4
+- 混合方案：默认本地 FFmpeg 拼接（零成本），可选 AI 动态化（Seedance 2.0 / Veo 3.1 Lite）
+- Logo 水印叠加：位置（左上/右上/左下/右下/浮动）+ 效果（静态/淡入淡出/浮动弹跳）
+
+### 新增文件
+| 文件 | 说明 |
+|------|------|
+| `py/video_processor.py` | VideoTask 类，FFmpeg 滤镜链构建与子进程执行 |
+| `py/ai_service.py` | AIProvider 抽象接口 + Seedance/Veo/Atlas Provider |
+| `js/video.js` | 视频面板 UI 逻辑（扫描、预览、勾选、生成、进度轮询） |
+
+### 新增 API
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/video/scan-dir` | 扫描目录返回 PNG 图片列表 + logo 信息 |
+| GET | `/api/image?path=` | 返回本地图片文件流（供缩略图加载） |
+| POST | `/api/video/generate` | 提交视频生成任务（后台线程执行，返回 task_id） |
+| GET | `/api/video/progress?task_id=` | 轮询生成进度（status/progress/message/output） |
+
+### AI 服务选择
+| Provider | 后端模型 | 免费额度 | 特点 |
+|----------|---------|---------|------|
+| seedance | Seedance 2.0（字节/即梦） | 每日 225 积分 | 图转视频最佳，通过 Atlas Cloud 调用 |
+| veo | Veo 3.1 Lite（Google） | 完全免费 + NexaAPI 100 次 | 视频自带音频生成 |
+| atlas | Atlas Cloud 多模型 | $1 体验金 | 一个 Key 切换 300+ 模型 |
+
+### FFmpeg 打包
+- FFmpeg 打包进 EXE（`--add-binary ffmpeg.exe;.`），EXE 约 110MB
+- 开发模式：`ffmpeg.exe` 放项目根目录或系统 PATH 中
+- 打包模式：从 `sys._MEIPASS` 自动加载
+- Flask 需 `threaded=True`（视频生成在后台线程执行）
+
+### 设计文档
+- 设计规格：[docs/superpowers/specs/2026-06-05-ai-video-generation-design.md](docs/superpowers/specs/2026-06-05-ai-video-generation-design.md)
+- 实现计划：[docs/superpowers/plans/2026-06-05-ai-video-generation-plan.md](docs/superpowers/plans/2026-06-05-ai-video-generation-plan.md)
+- 开发笔记：[NOTES.md](NOTES.md)
