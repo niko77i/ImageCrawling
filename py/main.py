@@ -278,8 +278,8 @@ def video_generate():
             ai_provider = None
             try:
                 ai_provider = get_provider(ai.get("service", "doubao"))
-            except AIServiceError:
-                pass
+            except AIServiceError as e:
+                task.message = f"AI 服务初始化失败: {e}"
 
             if ai_provider:
                 duration = int(ai.get("duration", 4))
@@ -291,8 +291,9 @@ def video_generate():
                     try:
                         ai_video = ai_provider.generate_video(img_path, duration, api_key)
                         ai_videos[img_path] = ai_video
-                    except AIServiceError:
-                        pass  # 降级为静态帧
+                        task.message = f"AI 动态化: {idx + 1}/{len(images)} 完成"
+                    except AIServiceError as e:
+                        task.message = f"AI 动态化: {idx + 1}/{len(images)} 失败({e})，降级为静态帧"
                 task.params["_ai_videos"] = ai_videos
 
         # 执行 FFmpeg
