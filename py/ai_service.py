@@ -228,9 +228,11 @@ class DoubaoProvider(AIProvider):
         data_uri = self._encode_image(image_path)
         self._log(f"Data URI size: {len(data_uri)//1024} KB")
 
+        # 豆包 i2v 只支持 5 秒和 10 秒，这里统一用 5 秒
+        doubao_duration = 5 if duration < 10 else 10
         prompt = (
             f"镜头缓缓推进，画面中的人物和景物自然微动，光影流转，"
-            f"营造电影级氛围感 --duration {duration} --camerafixed false --watermark true"
+            f"营造电影级氛围感 --duration {doubao_duration} --camerafixed false --watermark true"
         )
         self._log(f"Prompt: {prompt}")
 
