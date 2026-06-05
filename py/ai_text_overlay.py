@@ -73,7 +73,7 @@ def _ask_llm_design_text(texts: list[str], video_w: int, video_h: int, duration:
 
     try:
         response = client.chat.completions.create(
-            model="doubao-1-5-pro-32k-250115",
+            model="doubao-pro-32k",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -144,8 +144,8 @@ def apply_text_overlay(input_video: str, output_video: str, design: dict,
     _log(f"Applying {len(texts)} text overlays with font: {font_file}")
 
     # 构建 drawtext 滤镜链
-    filter_parts = ["[0:v]"]
-    current_label = "0:v"
+    filter_parts = []
+    prev_out = "0:v"
     for i, t in enumerate(texts):
         text = t["text"]
         start = t.get("start_time", 1)
@@ -177,33 +177,31 @@ def apply_text_overlay(input_video: str, output_video: str, design: dict,
         if x_pos == "center":
             x_expr = "(w-text_w)/2"
         elif x_pos == "left":
-            x_expr = f"w*0.05"
+            x_expr = "w*0.05"
         elif x_pos == "right":
-            x_expr = f"w*0.95-text_w"
-        elif x_pos.endswith("%"):
+            x_expr = "w*0.95-text_w"
+        elif isinstance(x_pos, str) and x_pos.endswith("%"):
             pct = float(x_pos[:-1]) / 100
             x_expr = f"w*{pct}"
         else:
-            x_expr = x_pos
+            x_expr = str(x_pos)
 
         if y_pos == "center":
             y_expr = "(h-text_h)/2"
-        elif y_pos.endswith("%"):
+        elif isinstance(y_pos, str) and y_pos.endswith("%"):
             pct = float(y_pos[:-1]) / 100
             y_expr = f"h*{pct}"
         else:
-            y_expr = y_pos
+            y_expr = str(y_pos)
 
         # 阴影 + 描边
-        shadow_opts = ""
-        if shadow:
-            shadow_opts = ":shadowcolor=black@0.7:shadowx=3:shadowy=3"
-
+        shadow_opts = ":shadowcolor=black@0.7:shadowx=3:shadowy=3" if shadow else ""
         border_opts = f":borderw={border}:bordercolor=black@0.4"
 
-        out_label = f"[txt{i}]" if i < len(texts) - 1 else "[outv]"
+        is_last = (i == len(texts) - 1)
+        out_label = "[outv]" if is_last else f"[txt{i}]"
         filter_parts.append(
-            f"[{current_label}]drawtext="
+            f"[{prev_out}]drawtext="
             f"fontfile={font_file}:"
             f"text='{escaped}':"
             f"fontsize={font_size}:"
@@ -214,10 +212,10 @@ def apply_text_overlay(input_video: str, output_video: str, design: dict,
             f"x={x_expr}:y={y_expr}"
             f"{out_label}"
         )
-        current_label = out_label if not out_label.startswith("[outv]") else ""
+        prev_out = out_label.lstrip("[").rstrip("]")
 
-    if current_label:
-        filter_parts.append(f"[{current_label}]format=yuv420p[outv]")
+    if prev_out != "outv":
+        filter_parts.append(f"[{prev_out}]format=yuv420p[outv]")
 
     filter_complex = ";".join(filter_parts)
 
