@@ -192,15 +192,24 @@ class VideoTask:
                 # 字号按短边的 6% 计算（9:16 竖屏约 65px）
                 font_size = max(int(min(W, H) * 0.06), 36)
 
-                for ti, text in enumerate(texts[:2]):
-                    # 随机开始时间（避开开头 1s 和结尾 3s）
-                    max_start = max(0.0, total_duration - 3.0)
-                    if max_start > 1.0:
-                        start_t = round(rng.uniform(1.0, max_start), 2)
-                    else:
-                        start_t = 1.0
-                    disp_dur = round(rng.uniform(2.0, 3.0), 1)
+                # 预计算所有文案的时间，确保不重叠
+                text_timings = []
+                prev_end = 0.0
+                for ti in range(min(len(texts), 2)):
+                    earliest = max(1.0, prev_end + 0.5)
+                    # 至少需要 2 秒显示时间（含淡入淡出），末尾留 0.5s 余量
+                    if earliest + 2.0 > total_duration - 0.5:
+                        break
+                    # 可用时长：从 earliest 到 total_duration-0.5
+                    avail = total_duration - 0.5 - earliest
+                    disp_dur = round(min(rng.uniform(2.0, 3.0), avail), 1)
+                    latest = max(earliest, total_duration - 0.5 - disp_dur)
+                    start_t = round(rng.uniform(earliest, latest), 2) if latest > earliest else earliest
+                    text_timings.append((start_t, disp_dur))
+                    prev_end = start_t + disp_dur
 
+                for ti, (start_t, disp_dur) in enumerate(text_timings):
+                    text = texts[ti]
                     # 位置：第一条靠上，第二条靠下
                     y_expr = f"h*0.13" if ti == 0 else f"h*0.75"
 
