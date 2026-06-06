@@ -84,12 +84,15 @@ class VideoTask:
 
         # AI 视频替换：如果有 AI 生成的视频，用它替代原始图片
         ai_videos = self.params.get("_ai_videos") or {}
+        first_ai_idx = -1
         img_start = next_idx
         for img_path in images:
             ai_path = ai_videos.get(img_path)
             if ai_path and os.path.isfile(ai_path):
                 # 用 AI 视频作为输入（无需 loop）
                 cmd += ["-i", ai_path.replace("\\", "/")]
+                if first_ai_idx < 0:
+                    first_ai_idx = next_idx
             else:
                 cmd += ["-loop", "1", "-i", img_path.replace("\\", "/")]
             next_idx += 1
@@ -318,6 +321,12 @@ class VideoTask:
             filter_parts.append(
                 f"[{music_idx}:a]volume=0.3,aloop=loop=-1:size=2e+09,"
                 f"atrim=duration={total_duration}[aout]"
+            )
+            audio_map = "[aout]"
+        elif first_ai_idx >= 0:
+            # 无背景音乐但有 AI 视频 → 用第一个 AI 视频的音频
+            filter_parts.append(
+                f"[{first_ai_idx}:a]atrim=duration={total_duration}[aout]"
             )
             audio_map = "[aout]"
         else:
