@@ -120,14 +120,19 @@ class VeoProvider(AIProvider):
 
     BASE_URL = "https://api.nexaapi.ai/v1"
 
+    def _log(self, msg: str):
+        sys.stderr.write(f"  [Veo] {msg}\n")
+        sys.stderr.flush()
+
     def generate_video(self, image_path: str, duration: int, api_key: str) -> str:
-        # Veo 限制最长 8 秒
+        self._log(f"generate_video called: image={image_path}, duration={duration}")
         duration = min(duration, 8)
         headers = {
             "Authorization": f"Bearer {api_key or 'free'}",
             "Content-Type": "application/json",
         }
 
+        self._log(f"POST {self.BASE_URL}/video/generate")
         try:
             resp = requests.post(
                 f"{self.BASE_URL}/video/generate",
@@ -140,42 +145,58 @@ class VeoProvider(AIProvider):
                 },
                 timeout=30,
             )
+            self._log(f"Status: {resp.status_code}")
             data = resp.json()
             if resp.status_code != 200:
+                self._log(f"FAILED: {data.get('message', resp.text)}")
                 raise AIServiceError(f"Veo 生成失败: {data.get('message', resp.text)}")
 
             # 同步返回
             video_url = data.get("video_url") or data.get("url")
             if video_url:
+                self._log(f"Sync response, downloading: {video_url[:80]}...")
                 return self._download_video(video_url)
 
             # 异步轮询
             task_id = data.get("task_id") or data.get("id")
             if task_id:
+                self._log(f"Async task: {task_id}")
                 return self._poll_and_download(task_id, headers)
 
+            self._log(f"Unknown response format: {data}")
             raise AIServiceError("Veo 返回格式未知")
         except requests.RequestException as e:
+            self._log(f"Network error: {e}")
             raise AIServiceError(f"Veo 网络错误: {e}")
 
     def _poll_and_download(self, task_id: str, headers: dict) -> str:
         """轮询 Veo 任务并下载视频。"""
         url = f"{self.BASE_URL}/video/status/{task_id}"
+        self._log(f"Polling {task_id}...")
         start = time.time()
+        last_status = ""
         while time.time() - start < 600:
             try:
                 resp = requests.get(url, headers=headers, timeout=15)
                 data = resp.json()
-                if data.get("status") in ("completed", "done"):
+                status = data.get("status", "")
+                if status != last_status:
+                    self._log(f"[{int(time.time()-start)}s] Status: {status}")
+                    last_status = status
+                if status in ("completed", "done"):
                     video_url = data.get("video_url") or data.get("url")
                     if video_url:
+                        self._log(f"Downloading: {video_url[:80]}...")
                         return self._download_video(video_url)
+                    self._log("Completed but no video URL!")
                     raise AIServiceError("Veo 完成但无视频 URL")
-                elif data.get("status") in ("failed", "error"):
+                elif status in ("failed", "error"):
+                    self._log(f"Task failed: {data.get('message')}")
                     raise AIServiceError(f"Veo 任务失败: {data.get('message')}")
             except requests.RequestException:
                 pass
             time.sleep(2)
+        self._log("Timeout!")
         raise AIServiceError("Veo 任务超时")
 
     def _download_video(self, video_url: str) -> str:
@@ -187,8 +208,10 @@ class VeoProvider(AIProvider):
             with os.fdopen(fd, "wb") as f:
                 for chunk in resp.iter_content(chunk_size=8192):
                     f.write(chunk)
+            self._log(f"Downloaded: {tmp_path} ({os.path.getsize(tmp_path)/1024:.0f} KB)")
             return tmp_path
         except requests.RequestException as e:
+            self._log(f"Download failed: {e}")
             raise AIServiceError(f"Veo 下载视频失败: {e}")
 
 
