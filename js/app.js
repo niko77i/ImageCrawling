@@ -1,6 +1,9 @@
 // 使用相对路径，自动适配当前访问地址（本地、局域网、打包后均可用）
 const API_BASE = "";
 
+// 爬取结果缓存（桥接视频面板使用）
+var _crawledPackages = [];
+
 // ---------- 标签页切换 ----------
 
 function switchTab(tabName) {
@@ -44,6 +47,7 @@ async function startScrape() {
     summary.style.display = "none";
     startBtn.disabled = true;
     startBtn.textContent = "⏳ 处理中...";
+    _crawledPackages = [];
 
     let successCount = 0;
     let failCount = 0;
@@ -72,6 +76,10 @@ async function startScrape() {
                 item.innerHTML = `<span class="icon">✅</span> <span class="text">${data.package_name}</span> <span class="detail">— ${data.image_count} 张图片${scaleInfo}${logoInfo} → ${data.saved_path}</span>`;
                 successCount++;
                 totalImages += (data.image_count || 0) + (data.logo ? 1 : 0);
+                _crawledPackages.push({
+                    package_name: data.package_name,
+                    saved_path: data.saved_path
+                });
             } else {
                 item.className = "result-item error";
                 item.innerHTML = `<span class="icon">❌</span> <span class="text">${url}</span> <span class="detail">— ${data.error}</span>`;
@@ -89,4 +97,48 @@ async function startScrape() {
     startBtn.textContent = "🚀 开始爬取";
     summary.style.display = "block";
     summary.textContent = `完成！成功 ${successCount} 个，失败 ${failCount} 个，共保存 ${totalImages} 张图片`;
+
+    // ---- 桥接：自动跳转到视频面板 ----
+    if (successCount === 1) {
+        _autoBridgeToVideo(_crawledPackages[0].saved_path);
+    } else if (successCount > 1) {
+        _renderPackagePicker();
+    }
+}
+
+function _autoBridgeToVideo(dirPath) {
+    var dirInput = document.getElementById("videoDir");
+    if (dirInput) dirInput.value = dirPath;
+    switchTab("video");
+    scanDirectory();
+}
+
+function _renderPackagePicker() {
+    var old = document.getElementById("packagePicker");
+    if (old) old.remove();
+
+    var summaryEl = document.getElementById("summary");
+    if (!summaryEl) return;
+
+    var picker = document.createElement("div");
+    picker.id = "packagePicker";
+    picker.innerHTML = "<strong>选择一个包跳转到视频面板：</strong>";
+
+    var list = document.createElement("div");
+    list.style.marginTop = "8px";
+    list.style.display = "flex";
+    list.style.flexWrap = "wrap";
+    list.style.gap = "8px";
+
+    _crawledPackages.forEach(function (pkg) {
+        var btn = document.createElement("button");
+        btn.textContent = pkg.package_name;
+        btn.onclick = function () {
+            _autoBridgeToVideo(pkg.saved_path);
+        };
+        list.appendChild(btn);
+    });
+
+    picker.appendChild(list);
+    summaryEl.parentNode.insertBefore(picker, summaryEl.nextSibling);
 }

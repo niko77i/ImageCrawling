@@ -388,3 +388,23 @@ button:disabled {
         grid-template-columns: 1fr;
     }
 }
+
+/* 包选择器（爬取→视频面板桥接） */
+#packagePicker {
+    margin-top: 12px;
+}
+#packagePicker button {
+    width: auto;
+    padding: 8px 16px;
+    background: #4a90d9;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+#packagePicker button:hover {
+    background: #3a7bc8;
+}
