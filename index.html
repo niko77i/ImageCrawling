@@ -13,6 +13,7 @@
         <div class="sidebar-title">🖼️ 工具集</div>
         <div class="nav-item active" onclick="switchTab('scrape')">📥 图片爬取</div>
         <div class="nav-item" onclick="switchTab('video')">🎬 AI 视频生成</div>
+        <div class="nav-item" onclick="switchTab('audio')">🎵 音频替换</div>
     </nav>
 
     <!-- ========== 主内容区 ========== -->
@@ -258,7 +259,42 @@
 
     </div>
 
+        <!-- ===== 音频替换面板 ===== -->
+        <div id="panel-audio" class="tab-panel">
+            <div class="panel-inner">
+                <h1>🎵 音频替换</h1>
+                <p class="subtitle">替换视频的音频轨道 — 支持音频文件或从视频提取音频</p>
+
+                <div class="form-group">
+                    <label>🎬 原视频（要被替换音频的视频）</label>
+                    <div style="display:flex;gap:6px;">
+                        <input type="text" id="audioVideoPath" placeholder="例如：F:\video\test.mp4" style="flex:1;" />
+                        <button type="button" onclick="browseFile('audioVideoPath','video')" style="width:44px;padding:10px;" title="选择视频">📂</button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>🎶 新音频源（音频文件或视频文件）</label>
+                    <div style="display:flex;gap:6px;">
+                        <input type="text" id="audioSourcePath" placeholder="例如：F:\music\bg.mp3 或 F:\video\source.mp4" style="flex:1;" />
+                        <button type="button" onclick="browseFile('audioSourcePath','audio')" style="width:44px;padding:10px;" title="选择音频或视频">📂</button>
+                    </div>
+                    <span class="hint">支持 .mp3/.wav/.aac/.m4a 等音频文件，或 .mp4/.avi 等视频文件（自动提取音频）</span>
+                </div>
+
+                <button id="audioReplaceBtn" onclick="startAudioReplace()">🎵 替换音频</button>
+
+                <div id="audioProgress" class="results" style="display:none;">
+                    <h3>⏳ 处理结果</h3>
+                    <div id="audioStatus"></div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
     <script src="js/app.js"></script>
     <script src="js/video.js"></script>
+    <script src="js/audio.js"></script>
 </body>
 </html>

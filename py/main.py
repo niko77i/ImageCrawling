@@ -375,6 +375,71 @@ def video_progress():
     return jsonify(resp)
 
 
+# ---------- 音频替换 API ----------
+
+
+@app.route("/api/audio-replace", methods=["POST"])
+def audio_replace():
+    """替换视频的音频轨道。"""
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"success": False, "error": "请求体不能为空"}), 400
+
+    video_path = (data.get("video_path") or "").strip()
+    audio_source = (data.get("audio_source") or "").strip()
+
+    if not video_path or not os.path.isfile(video_path):
+        return jsonify({"success": False, "error": "原视频文件不存在"}), 400
+    if not audio_source or not os.path.isfile(audio_source):
+        return jsonify({"success": False, "error": "音频源文件不存在"}), 400
+
+    # 输出路径：原视频同目录，文件名拼接 Music
+    video_dir = os.path.dirname(video_path)
+    base_name = os.path.splitext(os.path.basename(video_path))[0]
+    ext = os.path.splitext(video_path)[1] or ".mp4"
+    output_path = os.path.join(video_dir, f"{base_name}Music{ext}")
+
+    # 确保输出目录存在
+    try:
+        os.makedirs(video_dir, exist_ok=True)
+    except OSError as e:
+        return jsonify({"success": False, "error": f"无法创建输出目录: {e}"}), 500
+
+    ffmpeg = _get_ffmpeg_path()
+
+    # 构建 FFmpeg 命令：替换音频轨道（FFmpeg 自动从视频提取音频）
+    cmd = [
+        ffmpeg, "-y",
+        "-i", video_path.replace("\\", "/"),
+        "-i", audio_source.replace("\\", "/"),
+        "-c:v", "copy",
+        "-map", "0:v:0",
+        "-map", f"1:a:0",
+        "-shortest",
+        output_path.replace("\\", "/"),
+    ]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        if result.returncode != 0:
+            err_tail = result.stderr[-300:] if result.stderr else "(无输出)"
+            return jsonify({
+                "success": False,
+                "error": f"FFmpeg 执行失败: {err_tail}",
+            }), 500
+
+        size_mb = os.path.getsize(output_path) / (1024 * 1024)
+        return jsonify({
+            "success": True,
+            "output": output_path.replace("\\", "/"),
+            "size_mb": round(size_mb, 1),
+        })
+    except FileNotFoundError:
+        return jsonify({"success": False, "error": "未找到 FFmpeg"}), 500
+    except subprocess.TimeoutExpired:
+        return jsonify({"success": False, "error": "处理超时"}), 500
+
+
 # ---------- 文件浏览 API ----------
 
 
@@ -454,6 +519,8 @@ def browse_file():
 
     filters_map = {
         "mp3": "MP3 文件|*.mp3|所有文件|*.*",
+        "audio": "音频文件|*.mp3;*.wav;*.aac;*.m4a;*.flac;*.ogg|视频文件|*.mp4;*.avi;*.mkv;*.mov|所有文件|*.*",
+        "video": "视频文件|*.mp4;*.avi;*.mkv;*.mov;*.wmv;*.flv|所有文件|*.*",
         "image": "图片文件|*.png;*.jpg;*.jpeg;*.bmp|所有文件|*.*",
         "all": "所有文件|*.*",
     }

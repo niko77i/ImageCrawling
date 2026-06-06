@@ -9,11 +9,12 @@ var _crawledPackages = [];
 function switchTab(tabName) {
     // 更新导航激活态
     document.querySelectorAll(".nav-item").forEach((el, i) => {
-        el.classList.toggle("active", (tabName === "scrape" && i === 0) || (tabName === "video" && i === 1));
+        el.classList.toggle("active", (tabName === "scrape" && i === 0) || (tabName === "video" && i === 1) || (tabName === "audio" && i === 2));
     });
     // 切换面板
     document.getElementById("panel-scrape").classList.toggle("active", tabName === "scrape");
     document.getElementById("panel-video").classList.toggle("active", tabName === "video");
+    document.getElementById("panel-audio").classList.toggle("active", tabName === "audio");
 }
 
 function parseUrls(input) {
