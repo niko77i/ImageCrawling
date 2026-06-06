@@ -374,6 +374,9 @@ class DoubaoFastProvider(DoubaoProvider):
 
     MODEL = "doubao-seedance-1-0-pro-fast-251015"
 
+    def _log(self, msg: str):
+        pass  # 静默，不打印日志
+
 
 AI_PROVIDERS = {
     "seedance": SeedanceProvider,      # Seedance 2.0（每日 225 免费积分）
