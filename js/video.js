@@ -118,6 +118,17 @@ async function scanDirectory() {
         if (data.success) {
             videoState.images = data.images || [];
             videoState.logo = data.logo || null;
+            // 自动填充输出路径：{输入目录上一级}/ai/{包名}.mp4
+            var dirClean = dir.replace(/[\\/]+$/, "").replace(/\\/g, "/");
+            var parts = dirClean.split("/");
+            var pkgName = parts[parts.length - 1];
+            var parentDir = parts.slice(0, -1).join("/");
+            var outDir = parentDir + "/ai";
+            var outPath = outDir + "/" + pkgName + ".mp4";
+            var outEl = document.getElementById("outputPath");
+            if (outEl && !outEl.value.trim()) {
+                outEl.value = outPath;
+            }
             // 默认全选
             videoState.selectedImages = {};
             videoState.images.forEach(function (img) {
