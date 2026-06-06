@@ -26,6 +26,31 @@ class AIProvider:
         """将图片转为短视频，返回生成的 MP4 本地路径。"""
         raise NotImplementedError
 
+    @staticmethod
+    def _encode_image(image_path: str) -> str:
+        """将本地图片编码为 base64 data URI（JPEG 压缩，确保 ≤2MB）。"""
+        from io import BytesIO
+        try:
+            from PIL import Image
+        except ImportError:
+            with open(image_path, "rb") as f:
+                return f"data:image/png;base64,{base64.b64encode(f.read()).decode()}"
+
+        img = Image.open(image_path).convert("RGB")
+        w, h = img.size
+        if w < 300:
+            ratio = 300 / w
+            img = img.resize((300, int(h * ratio)), Image.LANCZOS)
+
+        quality = 90
+        while quality >= 40:
+            buf = BytesIO()
+            img.save(buf, format="JPEG", quality=quality)
+            if buf.tell() <= 2048 * 1024:
+                break
+            quality -= 15
+        return f"data:image/jpeg;base64,{base64.b64encode(buf.getvalue()).decode()}"
+
 
 class AtlasProvider(AIProvider):
     """通过 Atlas Cloud 统一网关调用 AI 视频模型。
@@ -127,6 +152,8 @@ class VeoProvider(AIProvider):
     def generate_video(self, image_path: str, duration: int, api_key: str) -> str:
         self._log(f"generate_video called: image={image_path}, duration={duration}")
         duration = min(duration, 8)
+        data_uri = self._encode_image(image_path)
+        self._log(f"Data URI size: {len(data_uri)//1024} KB")
         headers = {
             "Authorization": f"Bearer {api_key or 'free'}",
             "Content-Type": "application/json",
@@ -139,7 +166,7 @@ class VeoProvider(AIProvider):
                 headers=headers,
                 json={
                     "model": "veo-3.1-lite-i2v",
-                    "image_url": f"file://{image_path}",
+                    "image_url": data_uri,
                     "duration": duration,
                     "aspect_ratio": "16:9",
                 },
@@ -225,8 +252,6 @@ class DoubaoProvider(AIProvider):
 
     BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
     MODEL = "doubao-seedance-1-5-pro-251215"
-    MIN_WIDTH = 300
-    MAX_DATA_KB = 2048  # 图片太大则压缩
 
     def _log(self, msg: str):
         sys.stderr.write(f"  [Doubao] {msg}\n")
@@ -321,39 +346,6 @@ class DoubaoProvider(AIProvider):
             time.sleep(3)
         self._log(f"Timeout after {timeout}s")
         raise AIServiceError("豆包 Seedance 任务超时（15 分钟）")
-
-    def _encode_image(self, image_path: str) -> str:
-        """将本地图片编码为适合 API 的 data URI。
-        要求: 宽度 ≥300px，payload ≤2MB。
-        """
-        from io import BytesIO
-        try:
-            from PIL import Image
-        except ImportError:
-            # 无 PIL，直接 base64 原图
-            with open(image_path, "rb") as f:
-                return f"data:image/png;base64,{base64.b64encode(f.read()).decode()}"
-
-        img = Image.open(image_path).convert("RGB")
-        w, h = img.size
-
-        # 确保最小宽度 300px
-        if w < self.MIN_WIDTH:
-            ratio = self.MIN_WIDTH / w
-            img = img.resize((self.MIN_WIDTH, int(h * ratio)), Image.LANCZOS)
-            w, h = img.size
-
-        # JPEG 编码，逐步降质量直到 ≤ MAX_DATA_KB
-        quality = 90
-        while quality >= 40:
-            buf = BytesIO()
-            img.save(buf, format="JPEG", quality=quality)
-            size_kb = buf.tell() // 1024
-            if size_kb <= self.MAX_DATA_KB:
-                break
-            quality -= 15
-        data_uri = f"data:image/jpeg;base64,{base64.b64encode(buf.getvalue()).decode()}"
-        return data_uri
 
     def _download_video(self, video_url: str) -> str:
         """下载视频到临时文件，返回本地路径。"""
