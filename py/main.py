@@ -20,11 +20,6 @@ from ai_service import get_provider, AIServiceError
 # 判断是否为 PyInstaller 打包模式
 _FROZEN = getattr(sys, "frozen", False)
 
-# 调试日志 — 直接写 stderr，确保终端可见
-def _debug(msg: str):
-    sys.stderr.write(f"{msg}\n")
-    sys.stderr.flush()
-
 if _FROZEN:
     # 打包后所有文件在 sys._MEIPASS 下
     _FRONTEND_DIR = sys._MEIPASS
@@ -279,15 +274,11 @@ def video_generate():
     def _run():
         # 可选：AI 动态化
         ai = data.get("ai") or {}
-        _debug(f"\n[AI-DEBUG] ai config: enabled={ai.get('enabled')}, service={ai.get('service', 'doubao')}, key={'***' if ai.get('api_key') else 'MISSING'}, duration={ai.get('duration', 4)}")
         if ai.get("enabled") and ai.get("api_key"):
             ai_provider = None
             try:
-                _debug(f"[AI-DEBUG] get_provider('{ai.get('service', 'doubao')}') ...")
                 ai_provider = get_provider(ai.get("service", "doubao"))
-                _debug(f"[AI-DEBUG] provider created: {type(ai_provider).__name__}")
             except AIServiceError as e:
-                _debug(f"[AI-DEBUG] get_provider FAILED: {e}")
                 task.message = f"AI 服务初始化失败: {e}"
 
             if ai_provider:
@@ -295,30 +286,22 @@ def video_generate():
                 api_key = ai["api_key"]
                 custom_prompt = ai.get("prompt") or None
                 ai_videos = {}
-                # AI 视频临时目录（项目根目录下的 temp/，用完即删）
                 ai_temp_dir = os.path.join(os.path.dirname(_current_dir), "temp", "ai_videos")
                 os.makedirs(ai_temp_dir, exist_ok=True)
                 import shutil
                 from concurrent.futures import ThreadPoolExecutor, as_completed
-                _debug(f"[AI-DEBUG] AI temp dir: {ai_temp_dir}, parallel: max 3 threads")
 
-                # 并行生成 AI 视频（最多 3 个并发）
                 def _gen_one(idx, img_path):
-                    _debug(f"[AI-DEBUG] [{idx+1}/{len(images)}] generate_video({img_path})")
                     try:
-                        # 每个线程创建独立的 provider 实例
                         provider = get_provider(ai.get("service", "doubao"))
                         ai_video = provider.generate_video(img_path, duration, api_key, custom_prompt)
                         basename = os.path.splitext(os.path.basename(img_path))[0]
                         saved_path = os.path.join(ai_temp_dir, f"{basename}_ai.mp4")
                         shutil.move(ai_video, saved_path)
-                        _debug(f"[AI-DEBUG] [{idx+1}/{len(images)}] SUCCESS -> {saved_path}")
                         return (idx, img_path, saved_path, None)
                     except AIServiceError as e:
-                        _debug(f"[AI-DEBUG] [{idx+1}/{len(images)}] AIServiceError: {e}")
                         return (idx, img_path, None, str(e))
                     except Exception as e:
-                        _debug(f"[AI-DEBUG] [{idx+1}/{len(images)}] ERROR: {type(e).__name__}: {e}")
                         return (idx, img_path, None, str(e))
 
                 task.message = f"AI 动态化: 并行生成 {len(images)} 段视频..."
@@ -337,22 +320,20 @@ def video_generate():
 
                 task.params["_ai_videos"] = ai_videos
             else:
-                _debug(f"[AI-DEBUG] ai_provider is None, skipping AI")
+                task.message = "AI 服务未就绪，跳过 AI 动态化"
         else:
-            _debug(f"[AI-DEBUG] AI not enabled or no API key, skipping")
+            task.message = "未启用 AI，使用静态帧拼接"
 
-        # 执行 FFmpeg（生成初始视频）
+        # 执行 FFmpeg
         task.run()
 
         # 清理 AI 临时视频
         ai_videos = task.params.get("_ai_videos", {})
-        if ai_videos:
-            _debug(f"[AI-DEBUG] Cleaning up {len(ai_videos)} AI temp videos...")
-            for tmp_path in ai_videos.values():
-                try:
-                    os.remove(tmp_path)
-                except OSError:
-                    pass
+        for tmp_path in ai_videos.values():
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
 
 
     t = threading.Thread(target=_run, daemon=True)
