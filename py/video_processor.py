@@ -317,14 +317,20 @@ class VideoTask:
         filter_parts.append(f"{current_vid}format=yuv420p[outv]")
 
         # ⑧ 音频
+        # 检测第一个 AI 视频是否有音频轨道
+        ai_has_audio = False
+        if first_ai_idx >= 0:
+            ai_path = ai_videos.get(images[0]) if images else None
+            if ai_path:
+                ai_has_audio = self._video_has_audio(ai_path)
+
         if has_music:
             filter_parts.append(
                 f"[{music_idx}:a]volume=0.3,aloop=loop=-1:size=2e+09,"
                 f"atrim=duration={total_duration}[aout]"
             )
             audio_map = "[aout]"
-        elif first_ai_idx >= 0:
-            # 无背景音乐但有 AI 视频 → 用第一个 AI 视频的音频
+        elif ai_has_audio:
             filter_parts.append(
                 f"[{first_ai_idx}:a]atrim=duration={total_duration}[aout]"
             )
@@ -436,6 +442,28 @@ class VideoTask:
             "floating":     (f"{margin}+20*sin(t*2)",     f"H-h-{margin}-20*abs(cos(t*1.5))"),
         }
         return positions.get(position, positions["top-right"])
+
+    @staticmethod
+    def _video_has_audio(video_path: str) -> bool:
+        """用 ffprobe 检测视频是否包含音频轨道。"""
+        import shutil
+        ffprobe = VideoTask._ffmpeg_path()
+        # 替换文件名中的 ffmpeg → ffprobe
+        base = os.path.basename(ffprobe).replace("ffmpeg", "ffprobe")
+        ffprobe = os.path.join(os.path.dirname(ffprobe), base)
+        if not os.path.isfile(ffprobe):
+            ffprobe = shutil.which("ffprobe") or "ffprobe"
+        try:
+            result = subprocess.run(
+                [ffprobe, "-v", "quiet", "-print_format", "json",
+                 "-show_streams", video_path],
+                capture_output=True, text=True, timeout=10,
+            )
+            import json
+            streams = json.loads(result.stdout).get("streams", [])
+            return any(s.get("codec_type") == "audio" for s in streams)
+        except Exception:
+            return False
 
     @staticmethod
     def _find_font() -> str | None:
