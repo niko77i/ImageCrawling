@@ -291,14 +291,22 @@ def video_generate():
                 import shutil
                 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+                # AI 视频保存到输出视频同目录的 _ai_videos/，持久保留
+                ai_save_dir = os.path.join(os.path.dirname(output_path) or ".", "_ai_videos")
+
                 def _gen_one(idx, img_path):
                     try:
                         provider = get_provider(ai.get("service", "doubao"))
                         ai_video = provider.generate_video(img_path, duration, api_key, custom_prompt)
                         basename = os.path.splitext(os.path.basename(img_path))[0]
-                        saved_path = os.path.join(ai_temp_dir, f"{basename}_ai.mp4")
-                        shutil.move(ai_video, saved_path)
-                        return (idx, img_path, saved_path, None)
+                        # 存到 temp（供 FFmpeg 用）
+                        temp_path = os.path.join(ai_temp_dir, f"{basename}_ai.mp4")
+                        shutil.move(ai_video, temp_path)
+                        # 也复制到 _ai_videos 持久保留
+                        os.makedirs(ai_save_dir, exist_ok=True)
+                        save_path = os.path.join(ai_save_dir, f"{basename}_ai.mp4")
+                        shutil.copy2(temp_path, save_path)
+                        return (idx, img_path, temp_path, None)
                     except AIServiceError as e:
                         return (idx, img_path, None, str(e))
                     except Exception as e:
@@ -327,7 +335,7 @@ def video_generate():
         # 执行 FFmpeg
         task.run()
 
-        # 清理 AI 临时视频
+        # 清理 temp 中的 AI 视频（_ai_videos 中的副本保留）
         ai_videos = task.params.get("_ai_videos", {})
         for tmp_path in ai_videos.values():
             try:
