@@ -354,11 +354,18 @@ class SeedanceProvider(AtlasProvider):
         super().__init__(model="seedance-2.0")
 
 
+class DoubaoFastProvider(DoubaoProvider):
+    """豆包 Seedance 1.0 Pro Fast — 极速图生视频，适合快速预览。"""
+
+    MODEL = "doubao-seedance-1-0-pro-fast-251015"
+
+
 AI_PROVIDERS = {
-    "seedance": SeedanceProvider,  # 🥇 推荐：Seedance 2.0（每日 225 免费积分）
-    "doubao": DoubaoProvider,     # 🥇 豆包 Seedance 1.5 Pro（火山方舟）
-    "veo": VeoProvider,           # 🥈 备选：Google Veo 3.1 Lite（免费 + 音频）
-    "atlas": AtlasProvider,       # Atlas Cloud 多模型网关
+    "seedance": SeedanceProvider,      # Seedance 2.0（每日 225 免费积分）
+    "doubao": DoubaoProvider,         # 🥇 豆包 Seedance 1.5 Pro（效果最佳）
+    "doubao-fast": DoubaoFastProvider, # ⚡ 豆包 Seedance 1.0 Pro Fast（极速）
+    "veo": VeoProvider,               # Google Veo 3.1 Lite（免费 + 音频）
+    "atlas": AtlasProvider,           # Atlas Cloud 多模型网关
 }
 
 
