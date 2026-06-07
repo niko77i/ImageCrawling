@@ -126,7 +126,7 @@ async function scanDirectory() {
             var outDir = parentDir + "/ai";
             var outPath = outDir + "/" + pkgName + ".mp4";
             var outEl = document.getElementById("outputPath");
-            if (outEl && !outEl.value.trim()) {
+            if (outEl) {
                 outEl.value = outPath;
             }
             // 默认全选
