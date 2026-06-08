@@ -555,8 +555,14 @@ def _resolve_initial_dir(path: str) -> str | None:
 
 
 def _native_file_dialog(filter_tuples: list, title: str = "选择文件", initial_dir: str = None) -> str | None:
-    """打开文件选择对话框。优先 tkinter，不可用时回退 PowerShell。"""
+    """打开文件选择对话框。优先 PowerShell（独立窗口，任何环境下都可用）。"""
     start_dir = _resolve_initial_dir(initial_dir) if initial_dir else None
+    # PowerShell 优先（独立窗口进程，后台/nohup 也能弹窗）
+    filter_str = "|".join(f"{name}|{ext}" for name, ext in filter_tuples)
+    result = _ps_file_dialog(filter_str, title, start_dir)
+    if result:
+        return result
+    # tkinter 回退（进程内，快但需要 GUI 上下文）
     try:
         import tkinter.filedialog as fd
         import tkinter as tk
@@ -568,17 +574,17 @@ def _native_file_dialog(filter_tuples: list, title: str = "选择文件", initia
             kwargs["initialdir"] = start_dir
         path = fd.askopenfilename(**kwargs)
         root.destroy()
-        if path:
-            return path.replace("/", "\\")
+        return path.replace("/", "\\") if path else None
     except Exception:
-        pass
-    filter_str = "|".join(f"{name}|{ext}" for name, ext in filter_tuples)
-    return _ps_file_dialog(filter_str, title, start_dir)
+        return None
 
 
 def _native_save_dialog(title: str = "保存文件", initial_dir: str = None) -> str | None:
     """打开保存文件对话框。"""
     start_dir = _resolve_initial_dir(initial_dir) if initial_dir else None
+    result = _ps_save_dialog(title, start_dir)
+    if result:
+        return result
     try:
         import tkinter.filedialog as fd
         import tkinter as tk
@@ -591,16 +597,17 @@ def _native_save_dialog(title: str = "保存文件", initial_dir: str = None) ->
             kwargs["initialdir"] = start_dir
         path = fd.asksaveasfilename(**kwargs)
         root.destroy()
-        if path:
-            return path.replace("/", "\\")
+        return path.replace("/", "\\") if path else None
     except Exception:
-        pass
-    return _ps_save_dialog(title, start_dir)
+        return None
 
 
 def _native_folder_dialog(title: str = "选择文件夹", initial_dir: str = None) -> str | None:
     """打开文件夹选择对话框。"""
     start_dir = _resolve_initial_dir(initial_dir) if initial_dir else None
+    result = _ps_folder_dialog(title, start_dir)
+    if result:
+        return result
     try:
         import tkinter.filedialog as fd
         import tkinter as tk
@@ -612,11 +619,9 @@ def _native_folder_dialog(title: str = "选择文件夹", initial_dir: str = Non
             kwargs["initialdir"] = start_dir
         path = fd.askdirectory(**kwargs)
         root.destroy()
-        if path:
-            return path.replace("/", "\\")
+        return path.replace("/", "\\") if path else None
     except Exception:
-        pass
-    return _ps_folder_dialog(title, start_dir)
+        return None
 
 
 def _ps_file_dialog(filter_str: str, title: str = "选择文件", initial_dir: str = None) -> str | None:
