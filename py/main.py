@@ -625,7 +625,7 @@ def _native_folder_dialog(title: str = "选择文件夹", initial_dir: str = Non
 
 
 def _ps_file_dialog(filter_str: str, title: str = "选择文件", initial_dir: str = None) -> str | None:
-    init = f'$d.InitialDirectory = "{initial_dir}";' if initial_dir else ""
+    init = f'$d.InitialDirectory = "{initial_dir.replace("/", "\\")}";' if initial_dir else ""
     ps = f'''
 Add-Type -AssemblyName System.Windows.Forms
 $d = New-Object System.Windows.Forms.OpenFileDialog
@@ -642,7 +642,7 @@ if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ $d.FileName 
 
 
 def _ps_save_dialog(title: str = "保存文件", initial_dir: str = None) -> str | None:
-    init = f'$d.InitialDirectory = "{initial_dir}";' if initial_dir else ""
+    init = f'$d.InitialDirectory = "{initial_dir.replace("/", "\\")}";' if initial_dir else ""
     ps = f'''
 Add-Type -AssemblyName System.Windows.Forms
 $d = New-Object System.Windows.Forms.SaveFileDialog
@@ -660,7 +660,14 @@ if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ $d.FileName 
 
 
 def _ps_folder_dialog(title: str = "选择文件夹", initial_dir: str = None) -> str | None:
-    init = f'$d.SelectedPath = "{initial_dir}";' if initial_dir else ""
+    init = ""
+    if initial_dir:
+        # 用 <ctrl>+<shift> 导航：先设置 RootFolder 为计算机，再设 SelectedPath
+        ps_dir = initial_dir.replace("/", "\\")
+        init = f'''
+$d.RootFolder = [Environment+SpecialFolder]::MyComputer
+$d.SelectedPath = "{ps_dir}"
+'''
     ps = f'''
 Add-Type -AssemblyName System.Windows.Forms
 $d = New-Object System.Windows.Forms.FolderBrowserDialog
