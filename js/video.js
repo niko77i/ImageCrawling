@@ -10,6 +10,7 @@ var videoState = {
     allSelected: true,
     taskId: null,
     pollTimer: null,
+    taskQueue: [],
 };
 
 // ---- 文件浏览按钮 ----
@@ -501,4 +502,157 @@ function resetGenerateButton() {
     var btn = document.getElementById("generateBtn");
     btn.disabled = false;
     btn.textContent = "🎬 生成视频";
+}
+
+// ---- 任务队列（纯增量，不动现有逻辑） ----
+
+function _snapshotQueueBody() {
+    // 复制当前表单设置，不引用 DOM
+    var outputPath = document.getElementById("outputPath").value.trim();
+    var musicPath = document.getElementById("musicPath").value.trim();
+    var bgImagePath = (document.getElementById("bgImagePath") || {}).value || "";
+    var bgColor = (document.getElementById("bgColor") || {}).value || "#1a1a2e";
+    var useAI = document.getElementById("useAI").checked;
+    var useLogo = document.getElementById("useLogo").checked;
+    var text1 = document.getElementById("textOverlay1").value.trim();
+    var text2 = document.getElementById("textOverlay2").value.trim();
+    var texts = [];
+    if (text1) texts.push(text1);
+    if (text2) texts.push(text2);
+
+    return {
+        images: videoState.images.slice(),  // 浅拷贝图片列表（不含选中状态）
+        logo: useLogo && videoState.logo ? JSON.parse(JSON.stringify(videoState.logo)) : null,
+        ai: useAI ? {
+            enabled: true,
+            service: document.getElementById("aiService").value,
+            api_key: document.getElementById("aiApiKey").value.trim(),
+            duration: parseInt(document.getElementById("aiDuration").value),
+            prompt: (document.getElementById("aiPrompt").value || "").trim() || null,
+        } : { enabled: false },
+        settings: {
+            duration_per_frame: parseInt(document.getElementById("frameDuration").value),
+            transition: document.getElementById("transition").value,
+            music_path: musicPath || null,
+            resolution: document.getElementById("resolution").value,
+            output_path: outputPath,
+            background_path: bgImagePath.trim() || null,
+            background_color: bgColor.replace("#", "") || "1a1a2e",
+            dynamic_bg: !!(document.getElementById("dynamicBg") || {}).checked,
+            dynamic_bg_mode: (document.getElementById("dynamicBgMode") || {}).value || "breathe",
+            content_scale: parseFloat((document.getElementById("contentScale") || {}).value || "0.82"),
+            texts: texts.slice(),
+            text_font: (document.getElementById("textFont") || {}).value || "simhei",
+            overwrite: !!(document.getElementById("overwriteVideo") || {}).checked,
+            logo_position: document.getElementById("logoPosition").value,
+            logo_effect: document.getElementById("logoEffect").value,
+        },
+    };
+}
+
+function addToQueue() {
+    var outputPath = document.getElementById("outputPath").value.trim();
+    if (!outputPath) { alert("请先填入输出路径"); return; }
+    var selectedCount = Object.keys(videoState.selectedImages).length;
+    if (selectedCount === 0) { alert("请至少选择一张图片"); return; }
+
+    var label = prompt("任务名称：", outputPath.replace(/\\/g, "/").split("/").pop().replace(".mp4", ""));
+    if (label === null) return;  // 用户取消
+
+    // 记录哪些图片被选中
+    var selectedSet = {};
+    Object.keys(videoState.selectedImages).forEach(function (p) { selectedSet[p] = true; });
+
+    videoState.taskQueue.push({
+        label: label || ("任务 " + videoState.taskQueue.length),
+        body: _snapshotQueueBody(),
+        selectedImages: selectedSet,  // 独立的选中状态快照
+    });
+    renderTaskQueue();
+}
+
+function removeFromQueue(index) {
+    videoState.taskQueue.splice(index, 1);
+    renderTaskQueue();
+}
+
+function renderTaskQueue() {
+    var section = document.getElementById("taskQueueSection");
+    var list = document.getElementById("taskQueueList");
+    var countEl = document.getElementById("taskQueueCount");
+    if (!section || !list) return;
+
+    if (videoState.taskQueue.length === 0) {
+        section.style.display = "none";
+        return;
+    }
+    section.style.display = "block";
+    if (countEl) countEl.textContent = videoState.taskQueue.length;
+
+    list.innerHTML = "";
+    videoState.taskQueue.forEach(function (t, i) {
+        var selCount = Object.keys(t.selectedImages).length;
+        var div = document.createElement("div");
+        div.className = "result-item success";
+        div.style.justifyContent = "space-between";
+        div.innerHTML =
+            '<span><span class="icon">📋</span> ' + t.label +
+            ' — ' + selCount + ' 张图 → ' + t.body.settings.output_path + '</span>' +
+            '<span onclick="removeFromQueue(' + i + ')" style="cursor:pointer;color:var(--accent-red);font-size:11px;">✕ 移除</span>';
+        list.appendChild(div);
+    });
+}
+
+async function generateAll() {
+    if (videoState.taskQueue.length === 0) { alert("任务队列为空"); return; }
+
+    var btn = document.getElementById("generateBtn");
+    btn.disabled = true;
+
+    for (var i = 0; i < videoState.taskQueue.length; i++) {
+        var t = videoState.taskQueue[i];
+        btn.textContent = "⏳ " + (i + 1) + "/" + videoState.taskQueue.length;
+
+        // 构建 body：用快照中的图片路径覆盖 selectedImages
+        var body = JSON.parse(JSON.stringify(t.body));
+        body.images = body.images.filter(function (img) { return t.selectedImages[img.path]; });
+
+        showProgress();
+        document.getElementById("videoStatus").innerHTML =
+            '<div class="result-item pending"><span class="icon">⏳</span> [' + (i + 1) + '/' + videoState.taskQueue.length + '] ' + t.label + '</div>';
+
+        try {
+            var resp = await fetch(API_BASE + "/api/video/generate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+            });
+            var data = await resp.json();
+            if (data.success) {
+                videoState.taskId = data.task_id;
+                await new Promise(function (resolve) {
+                    var timer = setInterval(async function () {
+                        try {
+                            var pr = await fetch(API_BASE + "/api/video/progress?task_id=" + videoState.taskId);
+                            var pd = await pr.json();
+                            document.getElementById("progressFill").style.width = (pd.progress * 100) + "%";
+                            if (pd.status === "completed" || pd.status === "error") {
+                                clearInterval(timer);
+                                resolve();
+                            }
+                        } catch (e) {}
+                    }, 2000);
+                });
+            }
+        } catch (err) {
+            console.error("任务失败:", t.label, err);
+        }
+    }
+
+    btn.textContent = "🎬 生成视频";
+    btn.disabled = false;
+    document.getElementById("videoStatus").innerHTML =
+        '<div class="result-item success"><span class="icon">✅</span> 全部 ' + videoState.taskQueue.length + ' 个任务执行完毕</div>';
+    videoState.taskQueue = [];
+    renderTaskQueue();
 }
