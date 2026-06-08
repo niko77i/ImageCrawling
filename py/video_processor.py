@@ -288,14 +288,16 @@ class VideoTask:
                 # 预计算所有文案的时间，确保不重叠
                 text_timings = []
                 prev_end = 0.0
+                # 文案持续时长按视频总长比例计算（30%-50%），2-8 秒之间
+                base_dur = max(2.0, min(8.0, total_duration * 0.4))
+                min_dur = max(1.5, base_dur - 1.0)
+                max_dur = base_dur + 1.0
                 for ti in range(min(len(texts), 2)):
                     earliest = max(1.0, prev_end + 0.5)
-                    # 至少需要 2 秒显示时间（含淡入淡出），末尾留 0.5s 余量
-                    if earliest + 2.0 > total_duration - 0.5:
+                    if earliest + min_dur > total_duration - 0.5:
                         break
-                    # 可用时长：从 earliest 到 total_duration-0.5
                     avail = total_duration - 0.5 - earliest
-                    disp_dur = round(min(rng.uniform(2.0, 3.0), avail), 1)
+                    disp_dur = round(min(rng.uniform(min_dur, max_dur), avail), 1)
                     latest = max(earliest, total_duration - 0.5 - disp_dur)
                     start_t = round(rng.uniform(earliest, latest), 2) if latest > earliest else earliest
                     text_timings.append((start_t, disp_dur))
