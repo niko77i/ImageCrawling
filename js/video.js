@@ -10,7 +10,6 @@ var videoState = {
     allSelected: true,
     taskId: null,
     pollTimer: null,
-    taskQueue: [],
 };
 
 // ---- 文件浏览按钮 ----
@@ -349,10 +348,30 @@ function toggleAIOptions() {
 
 // ---- 视频生成 ----
 
-function buildTaskBody() {
+async function startGenerate() {
+    var outputPath = document.getElementById("outputPath").value.trim();
+    if (!outputPath) {
+        alert("请输入输出路径");
+        return;
+    }
+    // 自动补全 .mp4 扩展名
+    if (!outputPath.toLowerCase().endsWith(".mp4")) {
+        outputPath = outputPath + ".mp4";
+    }
+
+    // 获取选中的图片路径
     var selectedPaths = videoState.images
         .filter(function (img) { return videoState.selectedImages[img.path]; })
         .map(function (img) { return img.path; });
+
+    if (selectedPaths.length === 0) {
+        alert("请至少选择一张图片");
+        return;
+    }
+
+    var generateBtn = document.getElementById("generateBtn");
+    generateBtn.disabled = true;
+    generateBtn.textContent = "⏳ 提交中...";
 
     var useLogo = document.getElementById("useLogo").checked;
     var useAI = document.getElementById("useAI").checked;
@@ -371,9 +390,10 @@ function buildTaskBody() {
     var texts = [];
     if (text1) texts.push(text1);
     if (text2) texts.push(text2);
+
     var randomOrder = (document.getElementById("randomOrder") || {}).checked;
 
-    return {
+    var body = {
         images: selectedPaths,
         random_order: !!randomOrder,
         logo: useLogo && videoState.logo ? {
@@ -393,7 +413,7 @@ function buildTaskBody() {
             transition: document.getElementById("transition").value,
             music_path: musicPath || null,
             resolution: document.getElementById("resolution").value,
-            output_path: (document.getElementById("outputPath").value || "").trim(),
+            output_path: outputPath,
             background_path: bgImagePath || null,
             background_color: bgColor || "1a1a2e",
             dynamic_bg: !!(document.getElementById("dynamicBg") || {}).checked,
@@ -404,121 +424,6 @@ function buildTaskBody() {
             overwrite: !!(document.getElementById("overwriteVideo") || {}).checked,
         },
     };
-}
-
-function addToQueue() {
-    var body = buildTaskBody();
-    if (body.images.length === 0) {
-        alert("请至少选择一张图片");
-        return;
-    }
-    if (!body.settings.output_path) {
-        alert("请输入输出路径");
-        return;
-    }
-    var label = prompt("任务名称（可选）：", body.settings.output_path.split("/").pop().replace(".mp4", ""));
-    videoState.taskQueue.push({
-        label: label || ("任务 " + (videoState.taskQueue.length + 1)),
-        body: body,
-    });
-    renderTaskQueue();
-}
-
-function removeFromQueue(index) {
-    videoState.taskQueue.splice(index, 1);
-    renderTaskQueue();
-}
-
-function renderTaskQueue() {
-    var container = document.getElementById("taskQueueList");
-    var section = document.getElementById("taskQueueSection");
-    if (!container || !section) return;
-    if (videoState.taskQueue.length === 0) {
-        section.style.display = "none";
-        return;
-    }
-    section.style.display = "block";
-    var countEl = document.getElementById("taskQueueCount");
-    if (countEl) countEl.textContent = videoState.taskQueue.length;
-    container.innerHTML = "";
-    videoState.taskQueue.forEach(function (task, i) {
-        var div = document.createElement("div");
-        div.className = "result-item success";
-        div.style.justifyContent = "space-between";
-        div.innerHTML = '<span><span class="icon">📋</span> ' + task.label +
-            ' — ' + task.body.images.length + ' 张图 → ' + task.body.settings.output_path + '</span>' +
-            '<span onclick="removeFromQueue(' + i + ')" style="cursor:pointer;color:var(--accent-red);font-size:11px;">✕ 移除</span>';
-        container.appendChild(div);
-    });
-}
-
-async function generateAll() {
-    if (videoState.taskQueue.length === 0) {
-        alert("任务队列为空，请先添加任务");
-        return;
-    }
-    var btn = document.getElementById("generateBtn");
-    btn.disabled = true;
-    for (var i = 0; i < videoState.taskQueue.length; i++) {
-        var task = videoState.taskQueue[i];
-        btn.textContent = "⏳ 生成 " + (i + 1) + "/" + videoState.taskQueue.length;
-        showProgress();
-        document.getElementById("videoStatus").innerHTML =
-            '<div class="result-item pending"><span class="icon">⏳</span> [' + (i + 1) + '/' + videoState.taskQueue.length + '] ' + task.label + '</div>';
-
-        try {
-            var resp = await fetch(API_BASE + "/api/video/generate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(task.body),
-            });
-            var data = await resp.json();
-            if (data.success) {
-                videoState.taskId = data.task_id;
-                // 等待当前任务完成
-                await new Promise(function (resolve) {
-                    videoState.pollTimer = setInterval(async function () {
-                        try {
-                            var pr = await fetch(API_BASE + "/api/video/progress?task_id=" + videoState.taskId);
-                            var pd = await pr.json();
-                            document.getElementById("progressFill").style.width = (pd.progress * 100) + "%";
-                            if (pd.status === "completed" || pd.status === "error") {
-                                clearInterval(videoState.pollTimer);
-                                videoState.pollTimer = null;
-                                resolve();
-                            }
-                        } catch (e) { /* ignore */ }
-                    }, 2000);
-                });
-            }
-        } catch (err) {
-            console.error("Task failed:", err);
-        }
-    }
-    btn.textContent = "🎬 生成视频";
-    btn.disabled = false;
-    document.getElementById("videoStatus").innerHTML =
-        '<div class="result-item success"><span class="icon">✅</span> 全部 ' + videoState.taskQueue.length + ' 个任务执行完毕</div>';
-    videoState.taskQueue = [];
-    renderTaskQueue();
-async function startGenerate() {
-    var body = buildTaskBody();
-    if (body.images.length === 0) {
-        alert("请至少选择一张图片");
-        return;
-    }
-    if (!body.settings.output_path) {
-        alert("请输入输出路径");
-        return;
-    }
-    // 自动补全 .mp4
-    if (!body.settings.output_path.toLowerCase().endsWith(".mp4")) {
-        body.settings.output_path = body.settings.output_path + ".mp4";
-    }
-
-    var generateBtn = document.getElementById("generateBtn");
-    generateBtn.disabled = true;
-    generateBtn.textContent = "⏳ 提交中...";
 
     try {
         var resp = await fetch(API_BASE + "/api/video/generate", {

@@ -283,17 +283,7 @@
                         覆盖已有视频（不勾选则自动新增不覆盖）
                     </label>
                 </div>
-                <div style="display:flex;gap:8px;">
-                    <button id="addToQueueBtn" onclick="addToQueue()" style="flex:1;background:var(--bg-elevated);color:var(--accent);border:1px solid var(--accent);">📋 添加到任务队列</button>
-                    <button id="generateBtn" onclick="startGenerate()" style="flex:1;">🎬 生成视频</button>
-                </div>
-
-                <!-- 任务队列 -->
-                <div id="taskQueueSection" class="results" style="display:none;">
-                    <h3>📋 任务队列（<span id="taskQueueCount">0</span>）</h3>
-                    <div id="taskQueueList"></div>
-                    <button id="generateAllBtn" onclick="generateAll()" style="margin-top:8px;background:var(--accent-green);color:#0c0c10;">⚡ 一键生成全部</button>
-                </div>
+                <button id="generateBtn" onclick="startGenerate()">🎬 生成视频</button>
 
                 <!-- 进度与结果 -->
                 <div id="videoProgress" class="results" style="display:none;">
