@@ -541,8 +541,22 @@ def _is_local_request() -> bool:
     return remote_addr in ("127.0.0.1", "::1", "localhost")
 
 
+def _resolve_initial_dir(path: str) -> str | None:
+    """解析初始目录：路径不存在则逐级向上查找存在的目录。"""
+    p = path.strip().replace("\\", "/")
+    while p:
+        if os.path.isdir(p):
+            return p
+        parent = os.path.dirname(p)
+        if parent == p:  # 根目录
+            return p if os.path.isdir(p) else None
+        p = parent
+    return None
+
+
 def _native_file_dialog(filter_tuples: list, title: str = "选择文件", initial_dir: str = None) -> str | None:
     """打开文件选择对话框。优先 tkinter，不可用时回退 PowerShell。"""
+    start_dir = _resolve_initial_dir(initial_dir) if initial_dir else None
     try:
         import tkinter.filedialog as fd
         import tkinter as tk
@@ -550,8 +564,8 @@ def _native_file_dialog(filter_tuples: list, title: str = "选择文件", initia
         root.withdraw()
         root.attributes("-topmost", True)
         kwargs = {"title": title, "filetypes": filter_tuples}
-        if initial_dir and os.path.isdir(initial_dir):
-            kwargs["initialdir"] = initial_dir
+        if start_dir:
+            kwargs["initialdir"] = start_dir
         path = fd.askopenfilename(**kwargs)
         root.destroy()
         if path:
@@ -559,11 +573,12 @@ def _native_file_dialog(filter_tuples: list, title: str = "选择文件", initia
     except Exception:
         pass
     filter_str = "|".join(f"{name}|{ext}" for name, ext in filter_tuples)
-    return _ps_file_dialog(filter_str, title, initial_dir)
+    return _ps_file_dialog(filter_str, title, start_dir)
 
 
 def _native_save_dialog(title: str = "保存文件", initial_dir: str = None) -> str | None:
     """打开保存文件对话框。"""
+    start_dir = _resolve_initial_dir(initial_dir) if initial_dir else None
     try:
         import tkinter.filedialog as fd
         import tkinter as tk
@@ -572,19 +587,20 @@ def _native_save_dialog(title: str = "保存文件", initial_dir: str = None) ->
         root.attributes("-topmost", True)
         kwargs = {"title": title, "defaultextension": ".mp4",
                    "filetypes": [("MP4 文件", "*.mp4"), ("所有文件", "*.*")]}
-        if initial_dir and os.path.isdir(initial_dir):
-            kwargs["initialdir"] = initial_dir
+        if start_dir:
+            kwargs["initialdir"] = start_dir
         path = fd.asksaveasfilename(**kwargs)
         root.destroy()
         if path:
             return path.replace("/", "\\")
     except Exception:
         pass
-    return _ps_save_dialog(title, initial_dir)
+    return _ps_save_dialog(title, start_dir)
 
 
 def _native_folder_dialog(title: str = "选择文件夹", initial_dir: str = None) -> str | None:
     """打开文件夹选择对话框。"""
+    start_dir = _resolve_initial_dir(initial_dir) if initial_dir else None
     try:
         import tkinter.filedialog as fd
         import tkinter as tk
@@ -592,19 +608,19 @@ def _native_folder_dialog(title: str = "选择文件夹", initial_dir: str = Non
         root.withdraw()
         root.attributes("-topmost", True)
         kwargs = {"title": title}
-        if initial_dir and os.path.isdir(initial_dir):
-            kwargs["initialdir"] = initial_dir
+        if start_dir:
+            kwargs["initialdir"] = start_dir
         path = fd.askdirectory(**kwargs)
         root.destroy()
         if path:
             return path.replace("/", "\\")
     except Exception:
         pass
-    return _ps_folder_dialog(title, initial_dir)
+    return _ps_folder_dialog(title, start_dir)
 
 
 def _ps_file_dialog(filter_str: str, title: str = "选择文件", initial_dir: str = None) -> str | None:
-    init = f'$d.InitialDirectory = "{initial_dir}";' if initial_dir and os.path.isdir(initial_dir) else ""
+    init = f'$d.InitialDirectory = "{initial_dir}";' if initial_dir else ""
     ps = f'''
 Add-Type -AssemblyName System.Windows.Forms
 $d = New-Object System.Windows.Forms.OpenFileDialog
@@ -621,7 +637,7 @@ if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ $d.FileName 
 
 
 def _ps_save_dialog(title: str = "保存文件", initial_dir: str = None) -> str | None:
-    init = f'$d.InitialDirectory = "{initial_dir}";' if initial_dir and os.path.isdir(initial_dir) else ""
+    init = f'$d.InitialDirectory = "{initial_dir}";' if initial_dir else ""
     ps = f'''
 Add-Type -AssemblyName System.Windows.Forms
 $d = New-Object System.Windows.Forms.SaveFileDialog
@@ -639,7 +655,7 @@ if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ $d.FileName 
 
 
 def _ps_folder_dialog(title: str = "选择文件夹", initial_dir: str = None) -> str | None:
-    init = f'$d.SelectedPath = "{initial_dir}";' if initial_dir and os.path.isdir(initial_dir) else ""
+    init = f'$d.SelectedPath = "{initial_dir}";' if initial_dir else ""
     ps = f'''
 Add-Type -AssemblyName System.Windows.Forms
 $d = New-Object System.Windows.Forms.FolderBrowserDialog
