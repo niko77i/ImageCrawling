@@ -130,11 +130,13 @@ class VideoTask:
         elif dynamic_bg:
             # 动态渐变背景：基于用户颜色 + 缓慢波动
             r, g, b = int(background_color[0:2], 16), int(background_color[2:4], 16), int(background_color[4:6], 16)
+            # 律动背景：亮度按节拍脉动 + 轻微色相偏移
+            pulse = "0.7+0.3*sin(2*PI*1.25*T)"  # 1.25Hz 亮度脉动
             filter_parts.append(
                 f"color=c=0x{background_color}:s={W}x{H}:r=30,"
-                f"geq=r=clip({r}+30*sin(T*0.4+X/400)+20*cos(T*0.3+Y/350)\\,0\\,255):"
-                f"g=clip({g}+25*cos(T*0.5+Y/380)+30*sin(T*0.35+(X+Y)/500)\\,0\\,255):"
-                f"b=clip({b}+35*sin(T*0.45+(X+Y)/450)+25*cos(T*0.3+X/300)\\,0\\,255),"
+                f"geq=r=clip({r}*({pulse})\\,0\\,255):"
+                f"g=clip({g}*({pulse})\\,0\\,255):"
+                f"b=clip({b}*({pulse})\\,0\\,255),"
                 f"format=rgba,trim=duration={total_duration}[bg]"
             )
         else:
