@@ -180,14 +180,19 @@ async function scanDirectory() {
             var outPath = outDir + "/" + pkgName + ".mp4";
             var outEl = document.getElementById("outputPath");
             if (outEl) {
-                // 检查是否与已有文件冲突，自动递增
-                var checkResp = await fetch(API_BASE + "/api/video/next-filename", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ output_path: outPath }),
-                });
-                var checkData = await checkResp.json();
-                outEl.value = checkData.path || outPath;
+                var overwrite = (document.getElementById("overwriteVideo") || {}).checked;
+                if (!overwrite) {
+                    // 不覆盖时检查冲突，自动递增
+                    var checkResp = await fetch(API_BASE + "/api/video/next-filename", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ output_path: outPath }),
+                    });
+                    var checkData = await checkResp.json();
+                    outEl.value = checkData.path || outPath;
+                } else {
+                    outEl.value = outPath;
+                }
             }
             // 默认全选
             videoState.selectedImages = {};
@@ -406,6 +411,7 @@ async function startGenerate() {
             content_scale: contentScale,
             texts: texts,
             text_font: (document.getElementById("textFont") || {}).value || "simhei",
+            overwrite: !!(document.getElementById("overwriteVideo") || {}).checked,
         },
     };
 

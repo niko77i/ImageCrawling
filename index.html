@@ -226,7 +226,7 @@
                             <label>背景音乐（可选 .mp3）</label>
                             <div style="display:flex;gap:6px;">
                                 <input type="text" id="musicPath" placeholder="F:\music\bg.mp3（本地路径）" style="flex:1;" />
-                                <button type="button" onclick="browseFile('musicPath','mp3')" style="width:44px;padding:10px;" title="选择音频文件">📂</button>
+                                <button type="button" onclick="browseFile('musicPath','audio')" style="width:44px;padding:10px;" title="选择音频文件">📂</button>
                             </div>
                         </div>
                     </div>
@@ -261,6 +261,12 @@
                 </div>
 
                 <!-- 生成按钮 -->
+                <div class="form-group checkbox-group" style="margin-bottom:14px;">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="overwriteVideo" />
+                        覆盖已有视频（不勾选则自动新增不覆盖）
+                    </label>
+                </div>
                 <button id="generateBtn" onclick="startGenerate()">🎬 生成视频</button>
 
                 <!-- 进度与结果 -->

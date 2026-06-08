@@ -64,9 +64,11 @@ class VideoTask:
         else:
             total_duration = (len(images) - 1) * (duration_per_frame - xfade_dur) + duration_per_frame
 
-        # 检查输出路径是否已存在，有冲突则追加 _1, _2...
-        output_path = self._resolve_output_path(output_path)
-        settings["output_path"] = output_path
+        # 不勾选覆盖时，已有文件自动追加 _1, _2...
+        overwrite = bool(settings.get("overwrite", False))
+        if not overwrite:
+            output_path = self._resolve_output_path(output_path)
+            settings["output_path"] = output_path
 
         cmd = [ffmpeg, "-y"]
 
