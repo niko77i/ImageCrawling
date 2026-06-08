@@ -638,67 +638,54 @@ function renderTaskQueue() {
 }
 
 async function generateAll() {
-    var pending = videoState.taskQueue.filter(function (t) { return t.status === "pending"; });
-    if (pending.length === 0) { alert("没有待执行的任务"); return; }
-
     var MAX_CONCURRENT = 3;
-    // 取前 N 个改为 running
-    var toRun = pending.slice(0, MAX_CONCURRENT);
-    toRun.forEach(function (t) { t.status = "running"; });
-    renderTaskQueue();
 
-    var running = toRun.slice();
-
-    function runOne(task) {
-        return new Promise(async function (resolve) {
-            var body = JSON.parse(JSON.stringify(task.body));
-            body.images = task.body.images.filter(function (p) { return task.selectedImages[p]; });
-
-            try {
-                var resp = await fetch(API_BASE + "/api/video/generate", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(body),
+    var _runTask = async function (task) {
+        task.status = "running";
+        renderTaskQueue();
+        var body = JSON.parse(JSON.stringify(task.body));
+        body.images = task.body.images.filter(function (p) { return task.selectedImages[p]; });
+        try {
+            var resp = await fetch(API_BASE + "/api/video/generate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+            });
+            var data = await resp.json();
+            if (data.success) {
+                await new Promise(function (res) {
+                    var timer = setInterval(async function () {
+                        try {
+                            var pr = await fetch(API_BASE + "/api/video/progress?task_id=" + data.task_id);
+                            var pd = await pr.json();
+                            if (pd.status === "completed" || pd.status === "error") {
+                                clearInterval(timer);
+                                res();
+                            }
+                        } catch (e) {}
+                    }, 2000);
                 });
-                var data = await resp.json();
-                if (data.success) {
-                    await new Promise(function (res) {
-                        var timer = setInterval(async function () {
-                            try {
-                                var pr = await fetch(API_BASE + "/api/video/progress?task_id=" + data.task_id);
-                                var pd = await pr.json();
-                                if (pd.status === "completed") { clearInterval(timer); res(); }
-                                else if (pd.status === "error") { clearInterval(timer); res(); }
-                            } catch (e) { /* ignore */ }
-                        }, 2000);
-                    });
-                    task.status = "done";
-                } else {
-                    task.status = "error";
-                }
-            } catch (err) {
+                task.status = "done";
+            } else {
                 task.status = "error";
             }
-            resolve();
-        });
-    }
-
-    // 并行执行，每完成一个就检查是否还有待执行的
-    while (running.length > 0) {
-        await Promise.race(running.map(function (t) { return runOne(t); }));
-        // 移除已完成的
-        running = videoState.taskQueue.filter(function (t) { return t.status === "running"; });
-        // 补充新的
-        var nextPending = videoState.taskQueue.filter(function (t) { return t.status === "pending"; });
-        if (nextPending.length > 0 && running.length < MAX_CONCURRENT) {
-            var slots = MAX_CONCURRENT - running.length;
-            var newTasks = nextPending.slice(0, slots);
-            newTasks.forEach(function (t) { t.status = "running"; });
-            running = videoState.taskQueue.filter(function (t) { return t.status === "running"; });
+        } catch (err) {
+            task.status = "error";
         }
         renderTaskQueue();
+    };
+
+    // 信号量：每次从 pending 取一个执行，保持最多 MAX_CONCURRENT 个
+    while (true) {
+        var pending = videoState.taskQueue.filter(function (t) { return t.status === "pending"; });
+        var runningCount = videoState.taskQueue.filter(function (t) { return t.status === "running"; }).length;
+        if (pending.length === 0 && runningCount === 0) break;
+
+        if (runningCount < MAX_CONCURRENT && pending.length > 0) {
+            _runTask(pending[0]);  // fire and forget (no await)
+        }
+        await new Promise(function (r) { setTimeout(r, 1000); });
     }
 
     renderTaskQueue();
-    // 清理已完成的任务（保留在队列中展示，用户可以手动清除）
 }
