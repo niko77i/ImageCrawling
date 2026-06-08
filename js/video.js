@@ -408,6 +408,7 @@ async function startGenerate() {
             output_path: outputPath,
             background_path: bgImagePath || null,
             background_color: bgColor || "1a1a2e",
+            dynamic_bg: !!(document.getElementById("dynamicBg") || {}).checked,
             content_scale: contentScale,
             texts: texts,
             text_font: (document.getElementById("textFont") || {}).value || "simhei",

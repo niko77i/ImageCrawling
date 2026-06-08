@@ -119,12 +119,23 @@ class VideoTask:
         filter_parts = []
 
         # ① 背景 → [bg]（rgba 格式，统一用 alpha 通道）
+        dynamic_bg = bool(settings.get("dynamic_bg", False))
         if bg_src is not None:
             filter_parts.append(
                 f"{bg_src}loop=loop=-1:size=1:start=0,"
                 f"trim=duration={total_duration},setpts=PTS-STARTPTS,"
                 f"scale={W}:{H}:force_original_aspect_ratio=increase,"
                 f"crop={W}:{H},format=rgba[bg]"
+            )
+        elif dynamic_bg:
+            # 动态渐变背景：基于用户颜色 + 缓慢波动
+            r, g, b = int(background_color[0:2], 16), int(background_color[2:4], 16), int(background_color[4:6], 16)
+            filter_parts.append(
+                f"color=c=0x{background_color}:s={W}x{H}:r=30,"
+                f"geq=r='clip({r}+30*sin(T*0.4+X/400)+20*cos(T*0.3+Y/350),0,255)':"
+                f"g='clip({g}+25*cos(T*0.5+Y/380)+30*sin(T*0.35+(X+Y)/500),0,255)':"
+                f"b='clip({b}+35*sin(T*0.45+(X+Y)/450)+25*cos(T*0.3+X/300),0,255)':"
+                f"format=rgba,trim=duration={total_duration}[bg]"
             )
         else:
             filter_parts.append(
