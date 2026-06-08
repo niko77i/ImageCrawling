@@ -173,9 +173,15 @@
                             <label>背景颜色</label>
                             <input type="color" id="bgColor" value="#1a1a2e" style="height:38px;padding:2px 4px;cursor:pointer;" />
                             <label class="checkbox-label" style="margin-top:6px;">
-                                <input type="checkbox" id="dynamicBg" />
-                                动态渐变背景
+                                <input type="checkbox" id="dynamicBg" onchange="toggleDynamicBg()" />
+                                动态背景
                             </label>
+                            <select id="dynamicBgMode" style="margin-top:4px;display:none;">
+                                <option value="breathe">呼吸 - 缓慢柔和</option>
+                                <option value="wave">波浪 - 色彩流动</option>
+                                <option value="beat">律动 - 节拍脉动</option>
+                                <option value="flow">流光 - 对角渐变</option>
+                            </select>
                         </div>
                         <div class="form-group">
                             <label>内容缩放</label>

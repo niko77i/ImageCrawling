@@ -130,6 +130,11 @@ async function importFont() {
 // 初始化时加载字体
 loadFonts();
 
+function toggleDynamicBg() {
+    var checked = document.getElementById("dynamicBg").checked;
+    document.getElementById("dynamicBgMode").style.display = checked ? "" : "none";
+}
+
 // ---- 背景颜色行显示/隐藏 ----
 
 function toggleBgColorRow() {
@@ -409,6 +414,7 @@ async function startGenerate() {
             background_path: bgImagePath || null,
             background_color: bgColor || "1a1a2e",
             dynamic_bg: !!(document.getElementById("dynamicBg") || {}).checked,
+            dynamic_bg_mode: (document.getElementById("dynamicBgMode") || {}).value || "breathe",
             content_scale: contentScale,
             texts: texts,
             text_font: (document.getElementById("textFont") || {}).value || "simhei",

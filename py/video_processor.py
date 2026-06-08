@@ -128,16 +128,46 @@ class VideoTask:
                 f"crop={W}:{H},format=rgba[bg]"
             )
         elif dynamic_bg:
-            # 动态渐变背景：基于用户颜色 + 缓慢波动
             r, g, b = int(background_color[0:2], 16), int(background_color[2:4], 16), int(background_color[4:6], 16)
-            # 律动背景：亮度按节拍脉动 + 轻微色相偏移
-            pulse = "0.7+0.3*sin(2*PI*1.25*T)"  # 1.25Hz 亮度脉动
+            bg_mode = settings.get("dynamic_bg_mode", "breathe")
+            if bg_mode == "breathe":
+                # 呼吸：0.4Hz 缓慢亮度脉动，柔和自然
+                pulse = "0.78+0.22*sin(2*PI*0.4*T)"
+                geq = (
+                    f"geq=r=clip({r}*({pulse})\\,0\\,255):"
+                    f"g=clip({g}*({pulse})\\,0\\,255):"
+                    f"b=clip({b}*({pulse})\\,0\\,255)"
+                )
+            elif bg_mode == "wave":
+                # 波浪：RGB 以不同相位缓慢流动，产生色彩渐变
+                geq = (
+                    f"geq="
+                    f"r=clip({r}+20*sin(2*PI*0.3*T+X/600)+15*cos(2*PI*0.25*T+Y/500)\\,0\\,255):"
+                    f"g=clip({g}+25*cos(2*PI*0.35*T+Y/550)+18*sin(2*PI*0.28*T+X/650)\\,0\\,255):"
+                    f"b=clip({b}+22*sin(2*PI*0.32*T+(X+Y)/700)+20*cos(2*PI*0.22*T+X/580)\\,0\\,255)"
+                )
+            elif bg_mode == "beat":
+                # 律动：1.0Hz 节拍脉动 + 色相微调
+                beat = "0.7+0.3*pow(sin(2*PI*1.0*T)\\,2)"
+                hue_shift = "10*sin(2*PI*0.5*T)"
+                geq = (
+                    f"geq="
+                    f"r=clip({r}*({beat})+{hue_shift}\\,0\\,255):"
+                    f"g=clip({g}*({beat})-{hue_shift}/2\\,0\\,255):"
+                    f"b=clip({b}*({beat})\\,0\\,255)"
+                )
+            else:  # flow
+                # 流光：对角方向渐变色移动
+                angle = "X/800+Y/1200+T*0.3"
+                geq = (
+                    f"geq="
+                    f"r=clip({r}+30*sin(2*PI*({angle}))\\,0\\,255):"
+                    f"g=clip({g}+25*sin(2*PI*({angle}+0.33))\\,0\\,255):"
+                    f"b=clip({b}+35*sin(2*PI*({angle}+0.66))\\,0\\,255)"
+                )
             filter_parts.append(
                 f"color=c=0x{background_color}:s={W}x{H}:r=30,"
-                f"geq=r=clip({r}*({pulse})\\,0\\,255):"
-                f"g=clip({g}*({pulse})\\,0\\,255):"
-                f"b=clip({b}*({pulse})\\,0\\,255),"
-                f"format=rgba,trim=duration={total_duration}[bg]"
+                f"{geq},format=rgba,trim=duration={total_duration}[bg]"
             )
         else:
             filter_parts.append(
