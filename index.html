@@ -59,7 +59,7 @@
 
         <!-- ===== 视频面板 ===== -->
         <div id="panel-video" class="tab-panel">
-            <div style="display:flex;gap:0;">
+            <div style="display:flex;gap:12px;align-items:flex-start;">
                 <div class="panel-inner" style="flex:1;min-width:0;">
                 <h1>🎬 AI 视频生成</h1>
                 <p class="subtitle">从已爬取的图片生成视频，可选 Logo 水印与 AI 动态效果</p>
@@ -310,6 +310,17 @@
                     <div id="videoResult" style="display:none;"></div>
                 </div>
             </div>
+
+            <!-- 历史侧边栏 -->
+            <div id="historySidebar" style="width:220px;flex-shrink:0;background:var(--bg-surface);border:1px solid var(--border-subtle);padding:12px;max-height:80vh;overflow-y:auto;position:sticky;top:12px;">
+                <h3 style="font-family:var(--font-mono);font-size:11px;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:8px;">📋 历史设置</h3>
+                <div id="historyList"></div>
+                <div style="margin-top:8px;">
+                    <button onclick="saveHistory()" style="font-size:10px;padding:6px 8px;width:100%;">💾 保存当前设置</button>
+                </div>
+            </div>
+        </div>
+
         </div>
 
         <!-- ===== 音频替换面板 ===== -->
