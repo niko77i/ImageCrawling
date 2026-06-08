@@ -142,7 +142,14 @@ async function scanDirectory() {
             var outPath = outDir + "/" + pkgName + ".mp4";
             var outEl = document.getElementById("outputPath");
             if (outEl) {
-                outEl.value = outPath;
+                // 检查是否与已有文件冲突，自动递增
+                var checkResp = await fetch(API_BASE + "/api/video/next-filename", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ output_path: outPath }),
+                });
+                var checkData = await checkResp.json();
+                outEl.value = checkData.path || outPath;
             }
             // 默认全选
             videoState.selectedImages = {};

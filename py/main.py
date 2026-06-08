@@ -428,6 +428,28 @@ def audio_replace():
         return jsonify({"success": False, "error": "处理超时"}), 500
 
 
+@app.route("/api/video/next-filename", methods=["POST"])
+def video_next_filename():
+    """检查输出路径是否存在，返回不冲突的文件名。"""
+    data = request.get_json(silent=True) or {}
+    output_path = (data.get("output_path") or "").strip()
+    if not output_path:
+        return jsonify({"success": False, "error": "路径不能为空"}), 400
+
+    if not os.path.isfile(output_path):
+        return jsonify({"success": True, "path": output_path.replace("\\", "/")})
+
+    # 文件已存在，追加 _1, _2... 直到不冲突
+    base = os.path.splitext(output_path)[0]
+    ext = os.path.splitext(output_path)[1] or ".mp4"
+    counter = 1
+    while True:
+        new_path = f"{base}_{counter}{ext}"
+        if not os.path.isfile(new_path):
+            return jsonify({"success": True, "path": new_path.replace("\\", "/")})
+        counter += 1
+
+
 # ---------- 文件浏览 API ----------
 
 

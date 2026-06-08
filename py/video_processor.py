@@ -64,6 +64,10 @@ class VideoTask:
         else:
             total_duration = (len(images) - 1) * (duration_per_frame - xfade_dur) + duration_per_frame
 
+        # 检查输出路径是否已存在，有冲突则追加 _1, _2...
+        output_path = self._resolve_output_path(output_path)
+        settings["output_path"] = output_path
+
         cmd = [ffmpeg, "-y"]
 
         # ---- 输入排序 ----
@@ -409,6 +413,18 @@ class VideoTask:
         return self._result
 
     # ---------- 内部方法 ----------
+
+    @staticmethod
+    def _resolve_output_path(output_path: str) -> str:
+        """如果输出路径已存在，自动追加 _1, _2... 避免覆盖。"""
+        if not os.path.isfile(output_path):
+            return output_path
+        base = os.path.splitext(output_path)[0]
+        ext = os.path.splitext(output_path)[1] or ".mp4"
+        counter = 1
+        while os.path.isfile(f"{base}_{counter}{ext}"):
+            counter += 1
+        return f"{base}_{counter}{ext}"
 
     @staticmethod
     def _ffmpeg_path() -> str:
