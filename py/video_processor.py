@@ -290,8 +290,17 @@ class VideoTask:
 
                 for ti, (start_t, disp_dur) in enumerate(text_timings):
                     text = texts[ti]
-                    # 位置：第一条中上，第二条中间偏下
-                    y_expr = f"h*0.20" if ti == 0 else f"h*0.50"
+                    lines = self._wrap_text(text, font_size, W - 80)  # 左右留 40px 边距
+                    line_count = len(lines)
+
+                    # 位置：根据行数动态调整
+                    line_height = int(font_size * 1.35)
+                    if ti == 0:
+                        # 文案1：中上，多行时整体上移
+                        base_y = max(0.08, 0.20 - line_count * 0.03)
+                    else:
+                        # 文案2：中下，多行时整体下移
+                        base_y = max(0.45, 0.50 + line_count * 0.01)
 
                     # alpha 表达式：淡入 0.3s + 停留 + 淡出 0.3s
                     fade_dur = 0.3
@@ -302,21 +311,26 @@ class VideoTask:
                         f"if(lt(t,{start_t}+{disp_dur}),({start_t}+{disp_dur}-t)/{fade_dur},0))))"
                     )
 
-                    escaped = text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'").replace("%", "%%")
-                    out_label = f"[txt{ti}]"
-                    filter_parts.append(
-                        f"{current_vid}drawtext="
-                        f"fontfile={font_file}:"
-                        f"text='{escaped}':"
-                        f"fontsize={font_size}:"
-                        f"fontcolor=white:"
-                        f"shadowcolor=black@0.8:shadowx=4:shadowy=4:"
-                        f"borderw=4:bordercolor=black@0.5:"
-                        f"alpha='{alpha}':"
-                        f"x=(w-text_w)/2:y={y_expr}"
-                        f"{out_label}"
-                    )
-                    current_vid = out_label
+                    for li, line in enumerate(lines):
+                        escaped = line.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'").replace("%", "%%")
+                        is_last_line = (ti == len(text_timings) - 1 and li == line_count - 1)
+                        out_label = f"[txt{ti}_{li}]" if not is_last_line else f"[txt{ti}]"
+                        # 每行 Y 偏移
+                        offset_px = (li - (line_count - 1) / 2) * line_height
+                        y_expr = f"h*{base_y}+{offset_px}"
+                        filter_parts.append(
+                            f"{current_vid}drawtext="
+                            f"fontfile={font_file}:"
+                            f"text='{escaped}':"
+                            f"fontsize={font_size}:"
+                            f"fontcolor=white:"
+                            f"shadowcolor=black@0.8:shadowx=4:shadowy=4:"
+                            f"borderw=4:bordercolor=black@0.5:"
+                            f"alpha='{alpha}':"
+                            f"x=(w-text_w)/2:y={y_expr}"
+                            f"{out_label}"
+                        )
+                        current_vid = out_label
 
         # ⑦ 转 yuv 准备编码
         filter_parts.append(f"{current_vid}format=yuv420p[outv]")
@@ -481,6 +495,48 @@ class VideoTask:
             return any(s.get("codec_type") == "audio" for s in streams)
         except Exception:
             return False
+
+    @staticmethod
+    def _wrap_text(text: str, font_size: int, max_width: int) -> list[str]:
+        """智能换行：按单词/词组边界拆分，不割裂单词。
+        CJK 字符每个单独算，英文单词整体算。"""
+        if not text:
+            return []
+        # 每个字符的近似宽度（CJK ≈ font_size, Latin ≈ font_size * 0.55）
+        char_width = font_size * 0.6
+        max_chars = max(4, int(max_width / char_width))
+
+        # 分词：CJK 单字 + 拉丁单词
+        import re
+        tokens = re.findall(r'[一-鿿　-〿＀-￯]|[a-zA-Z0-9]+|[^一-鿿\s]+|\s+', text)
+
+        lines = []
+        current = ""
+        for token in tokens:
+            # 空格可合并
+            if token.isspace():
+                if current and not current.endswith(" "):
+                    current += " "
+                continue
+            # 仅拉丁单词太长也强制断
+            if len(token) > max_chars and token.isascii():
+                while token:
+                    current += token[:max_chars]
+                    token = token[max_chars:]
+                    if token:
+                        lines.append(current.rstrip())
+                        current = ""
+            elif len(current) + len(token.rstrip()) <= max_chars:
+                current += token
+            else:
+                if current.strip():
+                    lines.append(current.rstrip())
+                current = token
+
+        if current.strip():
+            lines.append(current.rstrip())
+
+        return lines if lines else [text]
 
     @staticmethod
     def _find_font(font_name: str = "simhei") -> str | None:
