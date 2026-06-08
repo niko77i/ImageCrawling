@@ -437,27 +437,28 @@ def _is_local_request() -> bool:
     return remote_addr in ("127.0.0.1", "::1", "localhost")
 
 
-def _native_file_dialog(filter_tuples: list, title: str = "选择文件") -> str | None:
+def _native_file_dialog(filter_tuples: list, title: str = "选择文件", initial_dir: str = None) -> str | None:
     """打开文件选择对话框。优先 tkinter，不可用时回退 PowerShell。"""
-    # 尝试 tkinter（进程内，快）
     try:
         import tkinter.filedialog as fd
         import tkinter as tk
         root = tk.Tk()
         root.withdraw()
         root.attributes("-topmost", True)
-        path = fd.askopenfilename(title=title, filetypes=filter_tuples)
+        kwargs = {"title": title, "filetypes": filter_tuples}
+        if initial_dir and os.path.isdir(initial_dir):
+            kwargs["initialdir"] = initial_dir
+        path = fd.askopenfilename(**kwargs)
         root.destroy()
         if path:
             return path.replace("/", "\\")
     except Exception:
         pass
-    # 回退 PowerShell
     filter_str = "|".join(f"{name}|{ext}" for name, ext in filter_tuples)
-    return _ps_file_dialog(filter_str, title)
+    return _ps_file_dialog(filter_str, title, initial_dir)
 
 
-def _native_save_dialog(title: str = "保存文件") -> str | None:
+def _native_save_dialog(title: str = "保存文件", initial_dir: str = None) -> str | None:
     """打开保存文件对话框。"""
     try:
         import tkinter.filedialog as fd
@@ -465,19 +466,20 @@ def _native_save_dialog(title: str = "保存文件") -> str | None:
         root = tk.Tk()
         root.withdraw()
         root.attributes("-topmost", True)
-        path = fd.asksaveasfilename(
-            title=title, defaultextension=".mp4",
-            filetypes=[("MP4 文件", "*.mp4"), ("所有文件", "*.*")],
-        )
+        kwargs = {"title": title, "defaultextension": ".mp4",
+                   "filetypes": [("MP4 文件", "*.mp4"), ("所有文件", "*.*")]}
+        if initial_dir and os.path.isdir(initial_dir):
+            kwargs["initialdir"] = initial_dir
+        path = fd.asksaveasfilename(**kwargs)
         root.destroy()
         if path:
             return path.replace("/", "\\")
     except Exception:
         pass
-    return _ps_save_dialog(title)
+    return _ps_save_dialog(title, initial_dir)
 
 
-def _native_folder_dialog(title: str = "选择文件夹") -> str | None:
+def _native_folder_dialog(title: str = "选择文件夹", initial_dir: str = None) -> str | None:
     """打开文件夹选择对话框。"""
     try:
         import tkinter.filedialog as fd
@@ -485,21 +487,26 @@ def _native_folder_dialog(title: str = "选择文件夹") -> str | None:
         root = tk.Tk()
         root.withdraw()
         root.attributes("-topmost", True)
-        path = fd.askdirectory(title=title)
+        kwargs = {"title": title}
+        if initial_dir and os.path.isdir(initial_dir):
+            kwargs["initialdir"] = initial_dir
+        path = fd.askdirectory(**kwargs)
         root.destroy()
         if path:
             return path.replace("/", "\\")
     except Exception:
         pass
-    return _ps_folder_dialog(title)
+    return _ps_folder_dialog(title, initial_dir)
 
 
-def _ps_file_dialog(filter_str: str, title: str = "选择文件") -> str | None:
+def _ps_file_dialog(filter_str: str, title: str = "选择文件", initial_dir: str = None) -> str | None:
+    init = f'$d.InitialDirectory = "{initial_dir}";' if initial_dir and os.path.isdir(initial_dir) else ""
     ps = f'''
 Add-Type -AssemblyName System.Windows.Forms
 $d = New-Object System.Windows.Forms.OpenFileDialog
 $d.Title = "{title}"
 $d.Filter = "{filter_str}"
+{init}
 if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ $d.FileName }}
 '''
     try:
@@ -509,13 +516,15 @@ if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ $d.FileName 
         return None
 
 
-def _ps_save_dialog(title: str = "保存文件") -> str | None:
+def _ps_save_dialog(title: str = "保存文件", initial_dir: str = None) -> str | None:
+    init = f'$d.InitialDirectory = "{initial_dir}";' if initial_dir and os.path.isdir(initial_dir) else ""
     ps = f'''
 Add-Type -AssemblyName System.Windows.Forms
 $d = New-Object System.Windows.Forms.SaveFileDialog
 $d.Title = "{title}"
 $d.Filter = "MP4 文件 (*.mp4)|*.mp4|所有文件 (*.*)|*.*"
 $d.DefaultExt = ".mp4"
+{init}
 if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ $d.FileName }}
 '''
     try:
@@ -525,11 +534,13 @@ if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ $d.FileName 
         return None
 
 
-def _ps_folder_dialog(title: str = "选择文件夹") -> str | None:
+def _ps_folder_dialog(title: str = "选择文件夹", initial_dir: str = None) -> str | None:
+    init = f'$d.SelectedPath = "{initial_dir}";' if initial_dir and os.path.isdir(initial_dir) else ""
     ps = f'''
 Add-Type -AssemblyName System.Windows.Forms
 $d = New-Object System.Windows.Forms.FolderBrowserDialog
 $d.Description = "{title}"
+{init}
 if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ $d.SelectedPath }}
 '''
     try:
@@ -546,6 +557,7 @@ def browse_file():
         return jsonify({"success": False, "error": "仅允许本机访问"}), 403
     data = request.get_json(silent=True) or {}
     file_type = data.get("type", "all")
+    initial_dir = data.get("initial_dir") or None
 
     filters_tk = {
         "mp3": [("MP3 文件", "*.mp3"), ("所有文件", "*.*")],
@@ -554,7 +566,7 @@ def browse_file():
         "image": [("图片文件", "*.png;*.jpg;*.jpeg;*.bmp"), ("所有文件", "*.*")],
         "all": [("所有文件", "*.*")],
     }
-    path = _native_file_dialog(filters_tk.get(file_type, filters_tk["all"]))
+    path = _native_file_dialog(filters_tk.get(file_type, filters_tk["all"]), initial_dir=initial_dir)
     if path:
         return jsonify({"success": True, "path": path.replace("\\", "/")})
     return jsonify({"success": True, "path": ""})
@@ -565,7 +577,9 @@ def browse_save():
     """打开文件保存对话框。"""
     if not _is_local_request():
         return jsonify({"success": False, "error": "仅允许本机访问"}), 403
-    path = _native_save_dialog()
+    data = request.get_json(silent=True) or {}
+    initial_dir = data.get("initial_dir") or None
+    path = _native_save_dialog(initial_dir=initial_dir)
     if path:
         return jsonify({"success": True, "path": path.replace("\\", "/")})
     return jsonify({"success": True, "path": ""})
@@ -576,7 +590,9 @@ def browse_folder():
     """打开文件夹选择对话框。"""
     if not _is_local_request():
         return jsonify({"success": False, "error": "仅允许本机访问"}), 403
-    path = _native_folder_dialog()
+    data = request.get_json(silent=True) or {}
+    initial_dir = data.get("initial_dir") or None
+    path = _native_folder_dialog(initial_dir=initial_dir)
     if path:
         return jsonify({"success": True, "path": path.replace("\\", "/")})
     return jsonify({"success": True, "path": ""})

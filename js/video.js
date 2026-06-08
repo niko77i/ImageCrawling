@@ -17,13 +17,19 @@ var videoState = {
 async function browseFile(inputId, fileType) {
     var inputEl = document.getElementById(inputId);
     if (!inputEl) return;
+    var initialDir = (inputEl.value || "").trim();
+    // 如果是文件路径，取所在目录
+    if (initialDir && initialDir.indexOf(".") > -1) {
+        var lastSep = Math.max(initialDir.lastIndexOf("/"), initialDir.lastIndexOf("\\"));
+        if (lastSep > -1) initialDir = initialDir.substring(0, lastSep);
+    }
     try {
         var ctrl = new AbortController();
         var timer = setTimeout(function () { ctrl.abort(); }, 30000);
         var resp = await fetch(API_BASE + "/api/browse-file", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ type: fileType }),
+            body: JSON.stringify({ type: fileType, initial_dir: initialDir || null }),
             signal: ctrl.signal,
         });
         clearTimeout(timer);
@@ -38,18 +44,24 @@ async function browseFile(inputId, fileType) {
 }
 
 async function browseSave() {
+    var outEl = document.getElementById("outputPath");
+    var initialDir = outEl ? (outEl.value || "").trim() : "";
+    if (initialDir && initialDir.indexOf(".") > -1) {
+        var lastSep = Math.max(initialDir.lastIndexOf("/"), initialDir.lastIndexOf("\\"));
+        if (lastSep > -1) initialDir = initialDir.substring(0, lastSep);
+    }
     try {
         var ctrl = new AbortController();
         var timer = setTimeout(function () { ctrl.abort(); }, 30000);
         var resp = await fetch(API_BASE + "/api/browse-save", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ initial_dir: initialDir || null }),
             signal: ctrl.signal,
         });
         clearTimeout(timer);
         var data = await resp.json();
         if (data.success && data.path) {
-            var outEl = document.getElementById("outputPath");
             if (outEl) outEl.value = data.path;
         }
     } catch (err) {
@@ -59,18 +71,20 @@ async function browseSave() {
 
 async function browseFolder(targetId) {
     targetId = targetId || "videoDir";
+    var dirEl = document.getElementById(targetId);
+    var initialDir = dirEl ? (dirEl.value || "").trim() : "";
     try {
         var ctrl = new AbortController();
         var timer = setTimeout(function () { ctrl.abort(); }, 30000);
         var resp = await fetch(API_BASE + "/api/browse-folder", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ initial_dir: initialDir || null }),
             signal: ctrl.signal,
         });
         clearTimeout(timer);
         var data = await resp.json();
         if (data.success && data.path) {
-            var dirEl = document.getElementById(targetId);
             if (dirEl) dirEl.value = data.path;
         }
     } catch (err) {
