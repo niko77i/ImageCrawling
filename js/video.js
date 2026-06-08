@@ -508,10 +508,12 @@ function resetGenerateButton() {
 
 function _snapshotCurrentSettings() {
     var useAI = document.getElementById("useAI").checked;
+    var selectedPaths = Object.keys(videoState.selectedImages);
     return {
         videoDir: document.getElementById("videoDir").value.trim(),
         outputPath: document.getElementById("outputPath").value.trim(),
-        selectedCount: Object.keys(videoState.selectedImages).length,
+        selectedCount: selectedPaths.length,
+        selectedImages: selectedPaths.slice(),
         useLogo: document.getElementById("useLogo").checked,
         logoPosition: document.getElementById("logoPosition").value,
         logoEffect: document.getElementById("logoEffect").value,
@@ -536,14 +538,28 @@ function _snapshotCurrentSettings() {
     };
 }
 
-function _applySettings(s) {
+async function _applySettings(s) {
     if (!s) return;
     var set = function (id, val) { var el = document.getElementById(id); if (el && val !== undefined && val !== null) el.value = val; };
     var check = function (id, val) { var el = document.getElementById(id); if (el) el.checked = !!val; };
 
-    if (s.videoDir) set("videoDir", s.videoDir);
-    // 如果有 videoDir，触发扫描加载图片
-    if (s.videoDir) { document.getElementById("videoDir").value = s.videoDir; scanDirectory(); }
+    if (s.videoDir) {
+        set("videoDir", s.videoDir);
+        // 等待扫描完成后再恢复选中状态
+        await scanDirectory();
+        // 恢复图片选中
+        if (s.selectedImages && s.selectedImages.length > 0) {
+            var selSet = {};
+            s.selectedImages.forEach(function (p) { selSet[p] = true; });
+            videoState.selectedImages = {};
+            videoState.images.forEach(function (img) {
+                videoState.selectedImages[img.path] = selSet[img.path] || false;
+                if (!videoState.selectedImages[img.path]) delete videoState.selectedImages[img.path];
+            });
+            videoState.allSelected = Object.keys(videoState.selectedImages).length === videoState.images.length;
+            renderImageGrid();
+        }
+    }
     set("outputPath", s.outputPath);
     check("useLogo", s.useLogo);
     if (s.logoPosition) set("logoPosition", s.logoPosition);
@@ -621,12 +637,12 @@ async function loadHistoryList() {
     } catch (e) {}
 }
 
-function loadHistoryEntry(pkg, index) {
-    fetch(API_BASE + "/api/video/history/list").then(function (r) { return r.json(); }).then(function (data) {
-        if (data.success && data.packages && data.packages[pkg] && data.packages[pkg][index]) {
-            _applySettings(data.packages[pkg][index]);
-        }
-    });
+async function loadHistoryEntry(pkg, index) {
+    var r = await fetch(API_BASE + "/api/video/history/list");
+    var data = await r.json();
+    if (data.success && data.packages && data.packages[pkg] && data.packages[pkg][index]) {
+        await _applySettings(data.packages[pkg][index]);
+    }
 }
 
 async function deleteHistoryEntry(pkg, index) {

@@ -127,7 +127,7 @@ body {
 .tab-panel {
     display: none;
     width: 100%;
-    max-width: 780px;
+    max-width: 1050px;
 }
 
 .tab-panel.active {
@@ -607,4 +607,23 @@ button:disabled {
     .panel-inner {
         padding: 24px 20px;
     }
+}
+
+/* 历史侧边栏 */
+#historySidebar {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    font-size: 11px;
+}
+.history-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 8px;
+    font-size: 11px;
+    border-bottom: 1px solid var(--border-subtle);
+    transition: background var(--transition);
+}
+.history-item:hover {
+    background: var(--bg-hover);
 }
