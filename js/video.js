@@ -520,9 +520,19 @@ function _snapshotQueueBody() {
     if (text1) texts.push(text1);
     if (text2) texts.push(text2);
 
+    // 图片用纯路径数组（后端需要字符串）
+    var imgPaths = videoState.images.map(function (img) { return img.path; });
+    var logoObj = null;
+    if (useLogo && videoState.logo) {
+        logoObj = {
+            path: videoState.logo.path,
+            position: document.getElementById("logoPosition").value,
+            effect: document.getElementById("logoEffect").value,
+        };
+    }
     return {
-        images: videoState.images.slice(),  // 浅拷贝图片列表（不含选中状态）
-        logo: useLogo && videoState.logo ? JSON.parse(JSON.stringify(videoState.logo)) : null,
+        images: imgPaths.slice(),
+        logo: logoObj,
         ai: useAI ? {
             enabled: true,
             service: document.getElementById("aiService").value,
@@ -544,8 +554,6 @@ function _snapshotQueueBody() {
             texts: texts.slice(),
             text_font: (document.getElementById("textFont") || {}).value || "simhei",
             overwrite: !!(document.getElementById("overwriteVideo") || {}).checked,
-            logo_position: document.getElementById("logoPosition").value,
-            logo_effect: document.getElementById("logoEffect").value,
         },
     };
 }
@@ -613,9 +621,9 @@ async function generateAll() {
         var t = videoState.taskQueue[i];
         btn.textContent = "⏳ " + (i + 1) + "/" + videoState.taskQueue.length;
 
-        // 构建 body：用快照中的图片路径覆盖 selectedImages
+        // 构建 body：过滤出选中的图片路径（纯字符串数组）
         var body = JSON.parse(JSON.stringify(t.body));
-        body.images = body.images.filter(function (img) { return t.selectedImages[img.path]; });
+        body.images = t.body.images.filter(function (p) { return t.selectedImages[p]; });
 
         showProgress();
         document.getElementById("videoStatus").innerHTML =
