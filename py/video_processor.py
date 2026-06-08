@@ -484,36 +484,47 @@ class VideoTask:
 
     @staticmethod
     def _find_font(font_name: str = "simhei") -> str | None:
-        """查找指定字体文件，返回 FFmpeg 可用的路径。"""
+        """查找指定字体文件，返回 FFmpeg 可用的路径。先查用户字体，再查系统字体。"""
         import platform
         system_root = os.environ.get("SystemRoot", r"C:\Windows")
 
-        # 字体名 → 文件名映射
-        font_map = {
-            "simhei": "simhei.ttf",
-            "msyh": "msyh.ttc",
-            "simsun": "simsun.ttc",
-            "arial": "arial.ttf",
-        }
+        # 用户导入字体目录
+        user_fonts_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fonts"
+        )
 
+        candidates = []
+
+        # 1. 先查用户导入字体
+        if os.path.isdir(user_fonts_dir):
+            for ext in (".ttf", ".otf", ".ttc", ".woff", ".woff2"):
+                p = os.path.join(user_fonts_dir, f"{font_name}{ext}")
+                if os.path.isfile(p):
+                    candidates.append(p)
+
+        # 2. 系统字体映射
         if platform.system() == "Windows":
             font_dir = os.path.join(system_root, "Fonts")
-            # 先试用户选择的字体，再按优先级回退
-            candidates = []
+            font_map = {
+                "simhei": "simhei.ttf",
+                "msyh": "msyh.ttc",
+                "simsun": "simsun.ttc",
+                "arial": "arial.ttf",
+            }
             target = font_map.get(font_name)
             if target:
                 candidates.append(os.path.join(font_dir, target))
-            # 回退列表
-            fallback = [os.path.join(font_dir, f) for f in ["simhei.ttf", "msyh.ttc", "simsun.ttc"]]
-            for fb in fallback:
-                if fb not in candidates:
-                    candidates.append(fb)
+            # 回退
+            for fb in ["simhei.ttf", "msyh.ttc", "simsun.ttc"]:
+                fp = os.path.join(font_dir, fb)
+                if fp not in candidates:
+                    candidates.append(fp)
         else:
-            candidates = [
+            candidates += [
                 "/System/Library/Fonts/PingFang.ttc",
-                "/System/Library/Fonts/STHeiti Light.ttc",
                 "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
             ]
+
         for p in candidates:
             if os.path.isfile(p):
                 path = p.replace("\\", "/")

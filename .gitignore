@@ -29,3 +29,4 @@ py/test_output*/
 Thumbs.db
 temp/
 ffmpeg.exe
+fonts/

@@ -92,6 +92,44 @@ async function browseFolder(targetId) {
     }
 }
 
+// ---- 字体管理 ----
+
+async function loadFonts() {
+    try {
+        var resp = await fetch(API_BASE + "/api/fonts/list");
+        var data = await resp.json();
+        if (data.success && data.fonts) {
+            var sel = document.getElementById("textFont");
+            if (!sel) return;
+            sel.innerHTML = "";
+            data.fonts.forEach(function(f) {
+                var opt = document.createElement("option");
+                opt.value = f.id;
+                opt.textContent = f.name + (f.source === "user" ? " ★" : "");
+                sel.appendChild(opt);
+            });
+            var userCount = data.fonts.filter(function(f) { return f.source === "user"; }).length;
+            var hint = document.getElementById("fontCount");
+            if (hint) hint.textContent = userCount > 0 ? "已导入 " + userCount + " 个自定义字体" : "可点击 📂 导入自定义字体";
+        }
+    } catch (e) {}
+}
+
+async function importFont() {
+    var resp = await fetch(API_BASE + "/api/fonts/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+    });
+    var data = await resp.json();
+    if (data.imported > 0) {
+        loadFonts();
+    }
+}
+
+// 初始化时加载字体
+loadFonts();
+
 // ---- 背景颜色行显示/隐藏 ----
 
 function toggleBgColorRow() {

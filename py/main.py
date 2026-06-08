@@ -450,6 +450,88 @@ def video_next_filename():
         counter += 1
 
 
+# ---------- 字体管理 API ----------
+
+# 字体存储目录（项目根目录下 fonts/）
+_FONTS_DIR = os.path.join(os.path.dirname(_current_dir), "fonts")
+
+
+def _scan_fonts_dir() -> list[dict]:
+    """扫描字体目录，返回所有可用字体列表。"""
+    fonts = []
+    # 系统字体
+    system_root = os.environ.get("SystemRoot", r"C:\Windows")
+    sys_font_dir = os.path.join(system_root, "Fonts")
+    sys_fonts = [
+        ("simhei", "黑体", os.path.join(sys_font_dir, "simhei.ttf")),
+        ("msyh", "微软雅黑", os.path.join(sys_font_dir, "msyh.ttc")),
+        ("simsun", "宋体", os.path.join(sys_font_dir, "simsun.ttc")),
+        ("arial", "Arial", os.path.join(sys_font_dir, "arial.ttf")),
+    ]
+    for fid, name, path in sys_fonts:
+        if os.path.isfile(path):
+            fonts.append({"id": fid, "name": name, "source": "system"})
+
+    # 用户导入的字体
+    if os.path.isdir(_FONTS_DIR):
+        for f in sorted(os.listdir(_FONTS_DIR)):
+            if f.lower().endswith((".ttf", ".otf", ".ttc", ".woff", ".woff2")):
+                fid = os.path.splitext(f)[0]
+                fonts.append({
+                    "id": fid,
+                    "name": fid.replace("_", " ").title(),
+                    "source": "user",
+                })
+    return fonts
+
+
+@app.route("/api/fonts/list", methods=["GET"])
+def fonts_list():
+    """返回所有可用字体（系统 + 用户导入）。"""
+    return jsonify({"success": True, "fonts": _scan_fonts_dir()})
+
+
+@app.route("/api/fonts/import", methods=["POST"])
+def fonts_import():
+    """导入字体文件到 fonts/ 目录。"""
+    if not _is_local_request():
+        return jsonify({"success": False, "error": "仅允许本机访问"}), 403
+
+    data = request.get_json(silent=True) or {}
+    source = (data.get("source") or "").strip()
+    if not source:
+        # 用对话框选择
+        filters = [
+            ("字体文件", "*.ttf;*.otf;*.ttc;*.woff;*.woff2"),
+            ("所有文件", "*.*"),
+        ]
+        source = _native_file_dialog(filters, "选择字体文件")
+        if not source:
+            return jsonify({"success": True, "imported": 0, "message": "未选择文件"})
+
+    os.makedirs(_FONTS_DIR, exist_ok=True)
+    imported = 0
+    import shutil
+
+    source_path = source.replace("\\", "/")
+    if os.path.isdir(source_path):
+        # 目录：导入所有字体
+        for root, dirs, files in os.walk(source_path):
+            for f in files:
+                if f.lower().endswith((".ttf", ".otf", ".ttc", ".woff", ".woff2")):
+                    dst = os.path.join(_FONTS_DIR, f)
+                    if not os.path.isfile(dst):
+                        shutil.copy2(os.path.join(root, f), dst)
+                    imported += 1
+    elif os.path.isfile(source_path) and source_path.lower().endswith((".ttf", ".otf", ".ttc", ".woff", ".woff2")):
+        dst = os.path.join(_FONTS_DIR, os.path.basename(source_path))
+        if not os.path.isfile(dst):
+            shutil.copy2(source_path, dst)
+        imported = 1
+
+    return jsonify({"success": True, "imported": imported, "fonts": _scan_fonts_dir()})
+
+
 # ---------- 文件浏览 API ----------
 
 
