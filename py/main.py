@@ -492,6 +492,102 @@ def video_next_filename():
         counter += 1
 
 
+# ---------- 视频设置历史 API ----------
+
+_VIDEO_HISTORY_DIR = os.path.join(os.path.dirname(_current_dir), "temp", "video_set")
+
+
+def _history_file(pkg: str) -> str:
+    safe = pkg.replace("\\", "/").replace("..", "").strip("/")
+    return os.path.join(_VIDEO_HISTORY_DIR, f"{safe}.json")
+
+
+def _load_pkg_history(pkg: str) -> list:
+    fp = _history_file(pkg)
+    if os.path.isfile(fp):
+        try:
+            import json
+            with open(fp, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return []
+    return []
+
+
+def _save_pkg_history(pkg: str, entries: list):
+    os.makedirs(_VIDEO_HISTORY_DIR, exist_ok=True)
+    import json
+    with open(_history_file(pkg), "w", encoding="utf-8") as f:
+        json.dump(entries, f, ensure_ascii=False, indent=2)
+
+
+def _list_packages() -> list[str]:
+    os.makedirs(_VIDEO_HISTORY_DIR, exist_ok=True)
+    pkgs = []
+    for f in sorted(os.listdir(_VIDEO_HISTORY_DIR)):
+        if f.endswith(".json"):
+            pkgs.append(f[:-5])  # 去掉 .json
+    return pkgs
+
+
+@app.route("/api/video/history/save", methods=["POST"])
+def video_history_save():
+    """保存当前视频生成设置到对应包的历史文件。"""
+    data = request.get_json(silent=True) or {}
+    entry = data.get("entry") or {}
+    if not entry:
+        return jsonify({"success": False, "error": "无数据"}), 400
+    import datetime
+    entry["saved_at"] = datetime.datetime.now().strftime("%m-%d %H:%M")
+    # 按包名分组
+    video_dir = (entry.get("videoDir") or "").strip()
+    pkg = os.path.basename(video_dir.rstrip("/\\")) if video_dir else "_uncategorized"
+    entries = _load_pkg_history(pkg)
+    entries.insert(0, entry)
+    if len(entries) > 30:
+        entries = entries[:30]
+    _save_pkg_history(pkg, entries)
+    return jsonify({"success": True, "pkg": pkg, "count": len(entries)})
+
+
+@app.route("/api/video/history/list", methods=["GET"])
+def video_history_list():
+    """按包名分组返回所有历史。"""
+    result = {}
+    for pkg in _list_packages():
+        result[pkg] = _load_pkg_history(pkg)
+    return jsonify({"success": True, "packages": result})
+
+
+@app.route("/api/video/history/delete", methods=["POST"])
+def video_history_delete():
+    """删除指定包或包内指定索引的条目。"""
+    data = request.get_json(silent=True) or {}
+    pkg = (data.get("pkg") or "").strip()
+    indices = data.get("indices")  # None=删整个包, list=删指定条目
+
+    if not pkg:
+        return jsonify({"success": False, "error": "未指定包名"}), 400
+
+    if indices is None:
+        # 删除整个包文件
+        fp = _history_file(pkg)
+        if os.path.isfile(fp):
+            os.remove(fp)
+        return jsonify({"success": True})
+
+    # 删除指定条目
+    entries = _load_pkg_history(pkg)
+    for i in sorted(indices, reverse=True):
+        if 0 <= i < len(entries):
+            entries.pop(i)
+    if entries:
+        _save_pkg_history(pkg, entries)
+    else:
+        os.remove(_history_file(pkg))
+    return jsonify({"success": True})
+
+
 # ---------- 字体管理 API ----------
 
 # 字体存储目录（项目根目录下 fonts/）

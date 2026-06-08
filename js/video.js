@@ -504,6 +504,163 @@ function resetGenerateButton() {
     btn.textContent = "🎬 生成视频";
 }
 
+// ---- 设置历史 ----
+
+function _snapshotCurrentSettings() {
+    var useAI = document.getElementById("useAI").checked;
+    return {
+        videoDir: document.getElementById("videoDir").value.trim(),
+        outputPath: document.getElementById("outputPath").value.trim(),
+        selectedCount: Object.keys(videoState.selectedImages).length,
+        useLogo: document.getElementById("useLogo").checked,
+        logoPosition: document.getElementById("logoPosition").value,
+        logoEffect: document.getElementById("logoEffect").value,
+        useAI: useAI,
+        aiService: document.getElementById("aiService").value,
+        aiDuration: document.getElementById("aiDuration").value,
+        aiPrompt: (document.getElementById("aiPrompt") || {}).value || "",
+        frameDuration: document.getElementById("frameDuration").value,
+        transition: document.getElementById("transition").value,
+        musicPath: document.getElementById("musicPath").value.trim(),
+        resolution: document.getElementById("resolution").value,
+        bgImagePath: document.getElementById("bgImagePath").value.trim(),
+        bgColor: document.getElementById("bgColor").value,
+        contentScale: document.getElementById("contentScale").value,
+        dynamicBg: !!(document.getElementById("dynamicBg") || {}).checked,
+        dynamicBgMode: (document.getElementById("dynamicBgMode") || {}).value || "breathe",
+        text1: document.getElementById("textOverlay1").value.trim(),
+        text2: document.getElementById("textOverlay2").value.trim(),
+        textFont: (document.getElementById("textFont") || {}).value || "simhei",
+        overwriteVideo: !!(document.getElementById("overwriteVideo") || {}).checked,
+        randomOrder: !!(document.getElementById("randomOrder") || {}).checked,
+    };
+}
+
+function _applySettings(s) {
+    if (!s) return;
+    var set = function (id, val) { var el = document.getElementById(id); if (el && val !== undefined && val !== null) el.value = val; };
+    var check = function (id, val) { var el = document.getElementById(id); if (el) el.checked = !!val; };
+
+    if (s.videoDir) set("videoDir", s.videoDir);
+    // 如果有 videoDir，触发扫描加载图片
+    if (s.videoDir) { document.getElementById("videoDir").value = s.videoDir; scanDirectory(); }
+    set("outputPath", s.outputPath);
+    check("useLogo", s.useLogo);
+    if (s.logoPosition) set("logoPosition", s.logoPosition);
+    if (s.logoEffect) set("logoEffect", s.logoEffect);
+    toggleLogoOptions();
+    check("useAI", s.useAI);
+    if (s.aiService) set("aiService", s.aiService);
+    if (s.aiDuration) set("aiDuration", s.aiDuration);
+    if (s.aiPrompt !== undefined) set("aiPrompt", s.aiPrompt);
+    toggleAIOptions();
+    set("frameDuration", s.frameDuration);
+    if (s.transition) set("transition", s.transition);
+    if (s.musicPath) set("musicPath", s.musicPath);
+    if (s.resolution) set("resolution", s.resolution);
+    if (s.bgImagePath) set("bgImagePath", s.bgImagePath);
+    if (s.bgColor) set("bgColor", s.bgColor);
+    toggleBgColorRow();
+    if (s.contentScale) set("contentScale", s.contentScale);
+    check("dynamicBg", s.dynamicBg);
+    if (s.dynamicBgMode) set("dynamicBgMode", s.dynamicBgMode);
+    toggleDynamicBg();
+    if (s.text1) set("textOverlay1", s.text1);
+    if (s.text2) set("textOverlay2", s.text2);
+    if (s.textFont) set("textFont", s.textFont);
+    check("overwriteVideo", s.overwriteVideo);
+    check("randomOrder", s.randomOrder);
+}
+
+async function saveHistory() {
+    var s = _snapshotCurrentSettings();
+    if (!s.videoDir && !s.outputPath) { alert("请先填入目录或输出路径"); return; }
+    try {
+        await fetch(API_BASE + "/api/video/history/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ entry: s }),
+        });
+        loadHistoryList();
+    } catch (e) {}
+}
+
+async function loadHistoryList() {
+    try {
+        var resp = await fetch(API_BASE + "/api/video/history/list");
+        var data = await resp.json();
+        if (!data.success) return;
+        var list = document.getElementById("historyList");
+        if (!list) return;
+        list.innerHTML = "";
+        var packages = data.packages || {};
+        Object.keys(packages).sort().forEach(function (pkg) {
+            var entries = packages[pkg];
+            // 包名标题行（可删除整个包）
+            var header = document.createElement("div");
+            header.style.cssText = "display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:6px 8px;background:var(--bg-elevated);font-family:var(--font-mono);font-size:11px;font-weight:600;letter-spacing:0.04em;";
+            header.innerHTML =
+                '<span>📁 ' + pkg + ' (' + entries.length + ')</span>' +
+                '<span onclick="deletePackageHistory(\'' + pkg.replace(/'/g, "\\'") + '\')" style="cursor:pointer;color:var(--accent-red);font-size:10px;" title="删除此包的全部历史">🗑 删除</span>';
+            list.appendChild(header);
+
+            entries.forEach(function (entry, i) {
+                var div = document.createElement("div");
+                div.className = "history-item";
+                div.style.cssText = "display:flex;justify-content:space-between;align-items:center;padding:4px 8px;font-size:11px;cursor:pointer;border-bottom:1px solid var(--border-subtle);";
+                div.innerHTML =
+                    '<span onclick="loadHistoryEntry(\'' + pkg.replace(/'/g, "\\'") + '\',' + i + ')" title="点击加载">' +
+                    '<span style="font-size:10px;color:var(--text-muted);">' + (entry.saved_at || "") + '</span> ' +
+                    (entry.outputPath ? entry.outputPath.split("/").pop().replace(".mp4","") : "?") +
+                    ' · ' + (entry.selectedCount || "?") + '张' + (entry.useAI ? "·AI" : "") +
+                    '</span>' +
+                    '<span onclick="deleteHistoryEntry(\'' + pkg.replace(/'/g, "\\'") + '\',' + i + ')" style="color:var(--accent-red);font-size:10px;cursor:pointer;">✕</span>';
+                list.appendChild(div);
+            });
+        });
+    } catch (e) {}
+}
+
+function loadHistoryEntry(pkg, index) {
+    fetch(API_BASE + "/api/video/history/list").then(function (r) { return r.json(); }).then(function (data) {
+        if (data.success && data.packages && data.packages[pkg] && data.packages[pkg][index]) {
+            _applySettings(data.packages[pkg][index]);
+        }
+    });
+}
+
+async function deleteHistoryEntry(pkg, index) {
+    await fetch(API_BASE + "/api/video/history/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pkg: pkg, indices: [index] }),
+    });
+    loadHistoryList();
+}
+
+async function deletePackageHistory(pkg) {
+    if (!confirm("确定删除 " + pkg + " 的全部历史？")) return;
+    await fetch(API_BASE + "/api/video/history/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pkg: pkg }),
+    });
+    loadHistoryList();
+}
+
+// 自动保存 + 初始加载
+var _origStartGenerate = startGenerate;
+startGenerate = async function() {
+    saveHistory();
+    return _origStartGenerate();
+};
+var _origAddToQueue = addToQueue;
+addToQueue = function() {
+    saveHistory();
+    return _origAddToQueue();
+};
+loadHistoryList();
+
 // ---- 任务队列（纯增量，不动现有逻辑） ----
 
 function _snapshotQueueBody() {
