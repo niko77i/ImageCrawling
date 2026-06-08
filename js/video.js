@@ -360,6 +360,7 @@ async function startGenerate() {
             background_color: bgColor || "1a1a2e",
             content_scale: contentScale,
             texts: texts,
+            text_font: (document.getElementById("textFont") || {}).value || "simhei",
         },
     };
 

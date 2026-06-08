@@ -259,7 +259,8 @@ class VideoTask:
         # ⑥ 文案浮层（最多两条，随机浮现 2-3 秒，艺术字效果）
         texts = [t.strip() for t in (settings.get("texts") or []) if t.strip()]
         if texts:
-            font_file = self._find_font()
+            text_font = settings.get("text_font", "simhei")
+            font_file = self._find_font(text_font)
             if font_file:
                 # 用文案内容 hash 做随机种子，保证可复现
                 seed = sum(ord(c) for c in texts[0]) + len(texts[0])
@@ -466,30 +467,39 @@ class VideoTask:
             return False
 
     @staticmethod
-    def _find_font() -> str | None:
-        """查找可用中文字体文件，返回 FFmpeg 可用的路径（冒号转义）。"""
+    def _find_font(font_name: str = "simhei") -> str | None:
+        """查找指定字体文件，返回 FFmpeg 可用的路径。"""
         import platform
         system_root = os.environ.get("SystemRoot", r"C:\Windows")
+
+        # 字体名 → 文件名映射
+        font_map = {
+            "simhei": "simhei.ttf",
+            "msyh": "msyh.ttc",
+            "simsun": "simsun.ttc",
+            "arial": "arial.ttf",
+        }
+
         if platform.system() == "Windows":
             font_dir = os.path.join(system_root, "Fonts")
-            candidates = [
-                os.path.join(font_dir, "simhei.ttf"),       # 黑体 — 粗壮醒目
-                os.path.join(font_dir, "msyh.ttc"),         # 微软雅黑 — 现代
-                os.path.join(font_dir, "simsun.ttc"),        # 宋体 — 回退
-            ]
+            # 先试用户选择的字体，再按优先级回退
+            candidates = []
+            target = font_map.get(font_name)
+            if target:
+                candidates.append(os.path.join(font_dir, target))
+            # 回退列表
+            fallback = [os.path.join(font_dir, f) for f in ["simhei.ttf", "msyh.ttc", "simsun.ttc"]]
+            for fb in fallback:
+                if fb not in candidates:
+                    candidates.append(fb)
         else:
-            # macOS / Linux 常见中文字体路径
             candidates = [
                 "/System/Library/Fonts/PingFang.ttc",
                 "/System/Library/Fonts/STHeiti Light.ttc",
-                "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
                 "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
-                "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
             ]
         for p in candidates:
             if os.path.isfile(p):
-                # FFmpeg 用 : 分隔选项名值对，盘符冒号无法安全转义
-                # 直接去掉盘符，C:/Windows/Fonts/simhei.ttf → /Windows/Fonts/simhei.ttf
                 path = p.replace("\\", "/")
                 if len(path) > 2 and path[1] == ":":
                     path = path[2:]

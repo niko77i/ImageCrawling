@@ -243,7 +243,16 @@
                         <label>📝 文案浮层（最多两条）</label>
                         <input type="text" id="textOverlay1" placeholder="文案 1（留空不显示）" style="margin-bottom:6px;" />
                         <input type="text" id="textOverlay2" placeholder="文案 2（留空不显示）" />
-                        <span class="hint">每条随机浮现 2-3 秒，淡入淡出 + 阴影描边，艺术字体</span>
+                        <div style="margin-top:6px;">
+                            <label style="font-size:11px;">字体</label>
+                            <select id="textFont">
+                                <option value="simhei">黑体（粗壮醒目）</option>
+                                <option value="msyh">微软雅黑（现代简洁）</option>
+                                <option value="simsun">宋体（传统典雅）</option>
+                                <option value="arial">Arial（英文粗体）</option>
+                            </select>
+                        </div>
+                        <span class="hint">每条随机浮现 2-3 秒，淡入淡出 + 阴影描边</span>
                     </div>
                 </div>
 
