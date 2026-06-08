@@ -290,8 +290,14 @@
 
                 <!-- 任务队列 -->
                 <div id="taskQueueSection" class="results" style="display:none;">
-                    <h3>📋 任务队列（<span id="taskQueueCount">0</span>）</h3>
-                    <div id="taskQueueList"></div>
+                    <!-- 执行中 -->
+                    <div id="runningSection" style="display:none;">
+                        <h3>⏳ 执行中（<span id="taskQueueRunningCount">0</span>）</h3>
+                        <div id="taskQueueRunning"></div>
+                    </div>
+                    <!-- 等待中 -->
+                    <h3>📋 等待中（<span id="taskQueuePendingCount">0</span>）</h3>
+                    <div id="taskQueuePending"></div>
                     <button id="generateAllBtn" onclick="generateAll()" style="margin-top:8px;background:var(--accent-green);color:#0c0c10;">⚡ 一键生成全部</button>
                 </div>
 

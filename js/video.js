@@ -572,95 +572,133 @@ function addToQueue() {
     Object.keys(videoState.selectedImages).forEach(function (p) { selectedSet[p] = true; });
 
     videoState.taskQueue.push({
-        label: label || ("任务 " + videoState.taskQueue.length),
+        id: Date.now() + Math.random(),
+        label: label || ("任务 " + (videoState.taskQueue.length + 1)),
         body: _snapshotQueueBody(),
-        selectedImages: selectedSet,  // 独立的选中状态快照
+        selectedImages: selectedSet,
+        status: "pending",  // pending | running | done | error
     });
     renderTaskQueue();
 }
 
 function removeFromQueue(index) {
+    var t = videoState.taskQueue[index];
+    if (t && t.status === "running") return;  // 不允许移除运行中的任务
     videoState.taskQueue.splice(index, 1);
     renderTaskQueue();
 }
 
 function renderTaskQueue() {
     var section = document.getElementById("taskQueueSection");
-    var list = document.getElementById("taskQueueList");
-    var countEl = document.getElementById("taskQueueCount");
-    if (!section || !list) return;
+    var pendingList = document.getElementById("taskQueuePending");
+    var runningList = document.getElementById("taskQueueRunning");
+    var pendingCount = document.getElementById("taskQueuePendingCount");
+    var runningCount = document.getElementById("taskQueueRunningCount");
+    var runningSection = document.getElementById("runningSection");
 
-    if (videoState.taskQueue.length === 0) {
-        section.style.display = "none";
-        return;
+    if (!section) return;
+    var pending = videoState.taskQueue.filter(function (t) { return t.status === "pending"; });
+    var running = videoState.taskQueue.filter(function (t) { return t.status === "running"; });
+
+    section.style.display = (pending.length + running.length > 0) ? "block" : "none";
+    if (runningSection) runningSection.style.display = running.length > 0 ? "block" : "none";
+
+    var pending = videoState.taskQueue.filter(function (t) { return t.status === "pending"; });
+    var running = videoState.taskQueue.filter(function (t) { return t.status === "running"; });
+
+    if (pendingCount) pendingCount.textContent = pending.length;
+    if (runningCount) runningCount.textContent = running.length;
+
+    if (pendingList) {
+        pendingList.innerHTML = "";
+        pending.forEach(function (t) {
+            var idx = videoState.taskQueue.indexOf(t);
+            var selCount = Object.keys(t.selectedImages).length;
+            var div = document.createElement("div");
+            div.className = "result-item success";
+            div.style.justifyContent = "space-between";
+            div.innerHTML =
+                '<span><span class="icon">📋</span> ' + t.label +
+                ' — ' + selCount + ' 张图 → ' + t.body.settings.output_path + '</span>' +
+                '<span onclick="removeFromQueue(' + idx + ')" style="cursor:pointer;color:var(--accent-red);font-size:11px;">✕ 移除</span>';
+            pendingList.appendChild(div);
+        });
     }
-    section.style.display = "block";
-    if (countEl) countEl.textContent = videoState.taskQueue.length;
 
-    list.innerHTML = "";
-    videoState.taskQueue.forEach(function (t, i) {
-        var selCount = Object.keys(t.selectedImages).length;
-        var div = document.createElement("div");
-        div.className = "result-item success";
-        div.style.justifyContent = "space-between";
-        div.innerHTML =
-            '<span><span class="icon">📋</span> ' + t.label +
-            ' — ' + selCount + ' 张图 → ' + t.body.settings.output_path + '</span>' +
-            '<span onclick="removeFromQueue(' + i + ')" style="cursor:pointer;color:var(--accent-red);font-size:11px;">✕ 移除</span>';
-        list.appendChild(div);
-    });
+    if (runningList) {
+        runningList.innerHTML = "";
+        running.forEach(function (t) {
+            var div = document.createElement("div");
+            div.className = "result-item pending";
+            div.innerHTML = '<span><span class="icon">⏳</span> ' + t.label +
+                ' — 生成中...</span>';
+            runningList.appendChild(div);
+        });
+    }
 }
 
 async function generateAll() {
-    if (videoState.taskQueue.length === 0) { alert("任务队列为空"); return; }
+    var pending = videoState.taskQueue.filter(function (t) { return t.status === "pending"; });
+    if (pending.length === 0) { alert("没有待执行的任务"); return; }
 
-    var btn = document.getElementById("generateBtn");
-    btn.disabled = true;
+    var MAX_CONCURRENT = 3;
+    // 取前 N 个改为 running
+    var toRun = pending.slice(0, MAX_CONCURRENT);
+    toRun.forEach(function (t) { t.status = "running"; });
+    renderTaskQueue();
 
-    for (var i = 0; i < videoState.taskQueue.length; i++) {
-        var t = videoState.taskQueue[i];
-        btn.textContent = "⏳ " + (i + 1) + "/" + videoState.taskQueue.length;
+    var running = toRun.slice();
 
-        // 构建 body：过滤出选中的图片路径（纯字符串数组）
-        var body = JSON.parse(JSON.stringify(t.body));
-        body.images = t.body.images.filter(function (p) { return t.selectedImages[p]; });
+    function runOne(task) {
+        return new Promise(async function (resolve) {
+            var body = JSON.parse(JSON.stringify(task.body));
+            body.images = task.body.images.filter(function (p) { return task.selectedImages[p]; });
 
-        showProgress();
-        document.getElementById("videoStatus").innerHTML =
-            '<div class="result-item pending"><span class="icon">⏳</span> [' + (i + 1) + '/' + videoState.taskQueue.length + '] ' + t.label + '</div>';
-
-        try {
-            var resp = await fetch(API_BASE + "/api/video/generate", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(body),
-            });
-            var data = await resp.json();
-            if (data.success) {
-                videoState.taskId = data.task_id;
-                await new Promise(function (resolve) {
-                    var timer = setInterval(async function () {
-                        try {
-                            var pr = await fetch(API_BASE + "/api/video/progress?task_id=" + videoState.taskId);
-                            var pd = await pr.json();
-                            document.getElementById("progressFill").style.width = (pd.progress * 100) + "%";
-                            if (pd.status === "completed" || pd.status === "error") {
-                                clearInterval(timer);
-                                resolve();
-                            }
-                        } catch (e) {}
-                    }, 2000);
+            try {
+                var resp = await fetch(API_BASE + "/api/video/generate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body),
                 });
+                var data = await resp.json();
+                if (data.success) {
+                    await new Promise(function (res) {
+                        var timer = setInterval(async function () {
+                            try {
+                                var pr = await fetch(API_BASE + "/api/video/progress?task_id=" + data.task_id);
+                                var pd = await pr.json();
+                                if (pd.status === "completed") { clearInterval(timer); res(); }
+                                else if (pd.status === "error") { clearInterval(timer); res(); }
+                            } catch (e) { /* ignore */ }
+                        }, 2000);
+                    });
+                    task.status = "done";
+                } else {
+                    task.status = "error";
+                }
+            } catch (err) {
+                task.status = "error";
             }
-        } catch (err) {
-            console.error("任务失败:", t.label, err);
-        }
+            resolve();
+        });
     }
 
-    btn.textContent = "🎬 生成视频";
-    btn.disabled = false;
-    document.getElementById("videoStatus").innerHTML =
-        '<div class="result-item success"><span class="icon">✅</span> 全部 ' + videoState.taskQueue.length + ' 个任务执行完毕</div>';
-    videoState.taskQueue = [];
+    // 并行执行，每完成一个就检查是否还有待执行的
+    while (running.length > 0) {
+        await Promise.race(running.map(function (t) { return runOne(t); }));
+        // 移除已完成的
+        running = videoState.taskQueue.filter(function (t) { return t.status === "running"; });
+        // 补充新的
+        var nextPending = videoState.taskQueue.filter(function (t) { return t.status === "pending"; });
+        if (nextPending.length > 0 && running.length < MAX_CONCURRENT) {
+            var slots = MAX_CONCURRENT - running.length;
+            var newTasks = nextPending.slice(0, slots);
+            newTasks.forEach(function (t) { t.status = "running"; });
+            running = videoState.taskQueue.filter(function (t) { return t.status === "running"; });
+        }
+        renderTaskQueue();
+    }
+
     renderTaskQueue();
+    // 清理已完成的任务（保留在队列中展示，用户可以手动清除）
 }
