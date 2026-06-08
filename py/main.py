@@ -168,28 +168,24 @@ def video_scan_dir():
         return jsonify({"success": False, "error": "目录不存在或不可访问"}), 400
 
     images = []
-    try:
-        entries = sorted(os.listdir(dir_path))
-    except OSError as e:
-        return jsonify({"success": False, "error": f"无法读取目录: {e}"}), 400
-
-    for f in entries:
-        if not f.lower().endswith(".png"):
-            continue
-        full = os.path.join(dir_path, f)
-        if not os.path.isfile(full):
-            continue
-        try:
-            from PIL import Image
-            with Image.open(full) as img:
-                images.append({
-                    "filename": f,
-                    "path": full.replace("\\", "/"),
-                    "width": img.width,
-                    "height": img.height,
-                })
-        except Exception:
-            pass
+    from PIL import Image
+    for root, dirs, files in os.walk(dir_path):
+        for f in sorted(files):
+            if not f.lower().endswith(".png"):
+                continue
+            full = os.path.join(root, f)
+            try:
+                with Image.open(full) as img:
+                    # 相对于扫描目录的路径，含子目录名
+                    rel = os.path.relpath(full, dir_path)
+                    images.append({
+                        "filename": rel,
+                        "path": full.replace("\\", "/"),
+                        "width": img.width,
+                        "height": img.height,
+                    })
+            except Exception:
+                pass
 
     if not images:
         return jsonify({"success": False, "error": "目录中无有效的 PNG 图片"}), 404
