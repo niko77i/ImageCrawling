@@ -131,39 +131,39 @@ class VideoTask:
             r, g, b = int(background_color[0:2], 16), int(background_color[2:4], 16), int(background_color[4:6], 16)
             bg_mode = settings.get("dynamic_bg_mode", "breathe")
             if bg_mode == "breathe":
-                # 呼吸：0.4Hz 缓慢亮度脉动，柔和自然
-                pulse = "0.78+0.22*sin(2*PI*0.4*T)"
+                # 呼吸：0.55Hz 亮度脉动，颜色微变
+                pulse = "0.72+0.28*sin(2*PI*0.55*T)"
                 geq = (
-                    f"geq=r=clip({r}*({pulse})\\,0\\,255):"
-                    f"g=clip({g}*({pulse})\\,0\\,255):"
-                    f"b=clip({b}*({pulse})\\,0\\,255)"
+                    f"geq=r=clip({r}*({pulse})+15*sin(2*PI*0.45*T)\\,0\\,255):"
+                    f"g=clip({g}*({pulse})+10*cos(2*PI*0.5*T)\\,0\\,255):"
+                    f"b=clip({b}*({pulse})+12*sin(2*PI*0.47*T)\\,0\\,255)"
                 )
             elif bg_mode == "wave":
-                # 波浪：RGB 以不同相位缓慢流动，产生色彩渐变
+                # 波浪：RGB 以不同相位流动，色彩变化更明显
                 geq = (
                     f"geq="
-                    f"r=clip({r}+20*sin(2*PI*0.3*T+X/600)+15*cos(2*PI*0.25*T+Y/500)\\,0\\,255):"
-                    f"g=clip({g}+25*cos(2*PI*0.35*T+Y/550)+18*sin(2*PI*0.28*T+X/650)\\,0\\,255):"
-                    f"b=clip({b}+22*sin(2*PI*0.32*T+(X+Y)/700)+20*cos(2*PI*0.22*T+X/580)\\,0\\,255)"
+                    f"r=clip({r}+35*sin(2*PI*0.45*T+X/500)+25*cos(2*PI*0.38*T+Y/400)\\,0\\,255):"
+                    f"g=clip({g}+40*cos(2*PI*0.52*T+Y/450)+28*sin(2*PI*0.42*T+X/550)\\,0\\,255):"
+                    f"b=clip({b}+35*sin(2*PI*0.48*T+(X+Y)/550)+30*cos(2*PI*0.35*T+X/480)\\,0\\,255)"
                 )
             elif bg_mode == "beat":
-                # 律动：1.0Hz 节拍脉动 + 色相微调
-                beat = "0.7+0.3*pow(sin(2*PI*1.0*T)\\,2)"
-                hue_shift = "10*sin(2*PI*0.5*T)"
+                # 律动：1.3Hz 节拍 + 色相跳动
+                beat = "0.65+0.35*pow(sin(2*PI*1.3*T)\\,2)"
+                hue_shift = "18*sin(2*PI*0.7*T)"
                 geq = (
                     f"geq="
                     f"r=clip({r}*({beat})+{hue_shift}\\,0\\,255):"
                     f"g=clip({g}*({beat})-{hue_shift}/2\\,0\\,255):"
-                    f"b=clip({b}*({beat})\\,0\\,255)"
+                    f"b=clip({b}*({beat})+8*cos(2*PI*0.65*T)\\,0\\,255)"
                 )
             else:  # flow
-                # 流光：对角方向渐变色移动
-                angle = "X/800+Y/1200+T*0.3"
+                # 流光：对角渐变，速度稍快
+                angle = "X/700+Y/1000+T*0.45"
                 geq = (
                     f"geq="
-                    f"r=clip({r}+30*sin(2*PI*({angle}))\\,0\\,255):"
-                    f"g=clip({g}+25*sin(2*PI*({angle}+0.33))\\,0\\,255):"
-                    f"b=clip({b}+35*sin(2*PI*({angle}+0.66))\\,0\\,255)"
+                    f"r=clip({r}+45*sin(2*PI*({angle}))\\,0\\,255):"
+                    f"g=clip({g}+40*sin(2*PI*({angle}+0.33))\\,0\\,255):"
+                    f"b=clip({b}+50*sin(2*PI*({angle}+0.66))\\,0\\,255)"
                 )
             filter_parts.append(
                 f"color=c=0x{background_color}:s={W}x{H}:r=30,"

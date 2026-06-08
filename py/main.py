@@ -283,6 +283,9 @@ def video_generate():
         return jsonify({"success": False, "error": "请求体不能为空"}), 400
 
     images = data.get("images") or []
+    if data.get("random_order"):
+        import random as _random
+        _random.shuffle(images)
     settings = data.get("settings") or {}
     output_path = settings.get("output_path", "").strip()
 

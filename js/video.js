@@ -391,8 +391,11 @@ async function startGenerate() {
     if (text1) texts.push(text1);
     if (text2) texts.push(text2);
 
+    var randomOrder = (document.getElementById("randomOrder") || {}).checked;
+
     var body = {
         images: selectedPaths,
+        random_order: !!randomOrder,
         logo: useLogo && videoState.logo ? {
             path: videoState.logo.path,
             position: document.getElementById("logoPosition").value,

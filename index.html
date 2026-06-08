@@ -78,7 +78,13 @@
                 <div id="imageListSection" class="form-group" style="display:none;">
                     <div style="display:flex;align-items:center;justify-content:space-between;">
                         <label>🖼️ 图片列表（共 <span id="imageCount">0</span> 张）</label>
-                        <span class="select-all" onclick="toggleSelectAll()">☑ 全选</span>
+                        <div style="display:flex;gap:12px;align-items:center;">
+                            <label class="checkbox-label" style="gap:4px;">
+                                <input type="checkbox" id="randomOrder" />
+                                随机排序
+                            </label>
+                            <span class="select-all" onclick="toggleSelectAll()">☑ 全选</span>
+                        </div>
                     </div>
                     <div id="imageGrid" class="image-grid"></div>
                 </div>
