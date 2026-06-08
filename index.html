@@ -33,7 +33,10 @@
 
                 <div class="form-group">
                     <label for="saveDir">💾 保存路径</label>
-                    <input type="text" id="saveDir" placeholder="例如：F:\images\google_ads\" />
+                    <div style="display:flex;gap:6px;">
+                        <input type="text" id="saveDir" placeholder="例如：F:\images\google_ads\" style="flex:1;" />
+                        <button type="button" onclick="browseFolder('saveDir')" style="width:44px;padding:10px;" title="选择文件夹">📂</button>
+                    </div>
                     <span class="hint">图片将按包名自动创建子文件夹</span>
                 </div>
 

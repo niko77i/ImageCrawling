@@ -57,7 +57,8 @@ async function browseSave() {
     }
 }
 
-async function browseFolder() {
+async function browseFolder(targetId) {
+    targetId = targetId || "videoDir";
     try {
         var ctrl = new AbortController();
         var timer = setTimeout(function () { ctrl.abort(); }, 30000);
@@ -69,7 +70,7 @@ async function browseFolder() {
         clearTimeout(timer);
         var data = await resp.json();
         if (data.success && data.path) {
-            var dirEl = document.getElementById("videoDir");
+            var dirEl = document.getElementById(targetId);
             if (dirEl) dirEl.value = data.path;
         }
     } catch (err) {
