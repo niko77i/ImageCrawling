@@ -93,6 +93,45 @@ def scrape():
 
     # 2. 创建保存目录
     pkg_dir = os.path.join(save_dir, pkg_name)
+
+    # 检查是否已有本地文件，有则直接返回（跳过爬取）
+    if os.path.isdir(pkg_dir):
+        local_pngs = [f for f in os.listdir(pkg_dir)
+                      if f.lower().endswith(".png") and os.path.isfile(os.path.join(pkg_dir, f))]
+        if local_pngs:
+            results = []
+            for f in sorted(local_pngs):
+                fp = os.path.join(pkg_dir, f)
+                try:
+                    from PIL import Image
+                    with Image.open(fp) as img:
+                        w, h = img.size
+                    results.append({"filename": f, "width": w, "height": h, "local": True})
+                except Exception:
+                    results.append({"filename": f, "width": 0, "height": 0, "local": True})
+            # 检查本地 logo
+            logo = None
+            logo_dir = os.path.join(pkg_dir, "包logo")
+            if os.path.isdir(logo_dir):
+                for lf in sorted(os.listdir(logo_dir)):
+                    if lf.lower().endswith(".png") and "_logo" in lf.lower():
+                        fp = os.path.join(logo_dir, lf)
+                        try:
+                            with Image.open(fp) as img:
+                                logo = {"filename": lf, "width": img.width, "height": img.height}
+                        except Exception:
+                            logo = {"filename": lf, "width": 0, "height": 0}
+                        break
+            return jsonify({
+                "success": True,
+                "package_name": pkg_name,
+                "saved_path": pkg_dir,
+                "image_count": len(results),
+                "images": results,
+                "logo": logo,
+                "from_cache": True,
+            })
+
     try:
         os.makedirs(pkg_dir, exist_ok=True)
     except OSError as e:

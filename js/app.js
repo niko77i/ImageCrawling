@@ -74,7 +74,8 @@ async function startScrape() {
                 item.className = "result-item success";
                 const logoInfo = data.logo ? " + logo" : "";
                 const scaleInfo = includeAds ? "" : "（原图）";
-                item.innerHTML = `<span class="icon">✅</span> <span class="text">${data.package_name}</span> <span class="detail">— ${data.image_count} 张图片${scaleInfo}${logoInfo} → ${data.saved_path}</span>`;
+                const cacheInfo = data.from_cache ? " 📂本地" : "";
+                item.innerHTML = `<span class="icon">✅</span> <span class="text">${data.package_name}${cacheInfo}</span> <span class="detail">— ${data.image_count} 张图片${scaleInfo}${logoInfo} → ${data.saved_path}</span>`;
                 successCount++;
                 totalImages += (data.image_count || 0) + (data.logo ? 1 : 0);
                 _crawledPackages.push({
