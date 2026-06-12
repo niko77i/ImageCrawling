@@ -36,3 +36,16 @@ def detect_format(width: int, height: int) -> str:
         return "portrait"
     else:
         return "square"
+
+
+def natural_sort_key(s):
+    """自然排序 key：数字按数值大小比较，文字按字母序（不区分大小写）。
+
+    将字符串拆分为文字段和数字段，数字段转为 int 比较。
+    例如：'包9' < '包10' < '包61' < '包610'
+
+    Returns:
+        list of (type_flag, value) — 0=int, 1=str
+    """
+    parts = re.split(r"(\d+)", (s or ""))
+    return [(0, int(p)) if p.isdigit() else (1, p.lower()) for p in parts]

@@ -1,6 +1,32 @@
 // 产品管理面板
 var prodState = { page: 1, pausedMode: false, products: [], pageSize: 10 };
 
+// ---- 自然排序 ----
+function naturalCompare(a, b) {
+    var re = /(\d+)/;
+    var aParts = (a || '').split(re);
+    var bParts = (b || '').split(re);
+    var len = Math.max(aParts.length, bParts.length);
+    for (var i = 0; i < len; i++) {
+        var ap = aParts[i] || '';
+        var bp = bParts[i] || '';
+        var aIsNum = /^\d+$/.test(ap);
+        var bIsNum = /^\d+$/.test(bp);
+        if (aIsNum && bIsNum) {
+            var cmp = parseInt(ap, 10) - parseInt(bp, 10);
+            if (cmp !== 0) return cmp;
+        } else if (aIsNum) {
+            return -1;
+        } else if (bIsNum) {
+            return 1;
+        } else {
+            var cmp = ap.toLowerCase().localeCompare(bp.toLowerCase());
+            if (cmp !== 0) return cmp;
+        }
+    }
+    return 0;
+}
+
 // ---- 分段开关 UI 同步 ----
 function updatePausedToggle() {
     var btnN = document.getElementById("prodToggleNormal");
@@ -299,14 +325,12 @@ function renderProductList(total) {
             '</span>';
         body.appendChild(pkgHeader);
 
-        // 排序：正常包在前（按系列名），暂停排在最后
+        // 排序：正常包在前，同状态内按系列名自然排序（数字按数值大小）
         var sortedPkgs = (prod.packages || []).slice().sort(function (a, b) {
             var so = {"":0,"rejected":1,"paused":2,"dropped":3};
             var sa = so[a.status||""]||0; var sb = so[b.status||""]||0;
             if (sa !== sb) return sa - sb;
-            var na = (a.series_name || "").toLowerCase();
-            var nb = (b.series_name || "").toLowerCase();
-            return na < nb ? -1 : na > nb ? 1 : 0;
+            return naturalCompare(a.series_name || "", b.series_name || "");
         });
 
         sortedPkgs.forEach(function (pkg) {

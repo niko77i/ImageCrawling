@@ -13,7 +13,7 @@ from flask_cors import CORS
 
 from scraper import scrape_images, scrape_logo, ScrapeError
 from resizer import process_image, save_logo, ResizeError
-from utils import extract_package_name
+from utils import extract_package_name, natural_sort_key
 from video_processor import VideoTask, VideoError
 from ai_service import get_provider, AIServiceError
 # google_ads_service 按需加载，不打包进 EXE
@@ -1048,7 +1048,12 @@ def products_list():
     products = []
     for r in rows:
         prod = dict(r)
-        pkgs = db.execute("SELECT * FROM packages WHERE product_id=? ORDER BY CASE WHEN status IS NULL OR status='' OR status='0' OR status=0 THEN 0 ELSE 1 END ASC, series_name COLLATE NOCASE ASC", (r["id"],)).fetchall()
+        pkgs = db.execute("SELECT * FROM packages WHERE product_id=?", (r["id"],)).fetchall()
+        # 自然排序：正常包在前（status 为空/0），然后按 series_name 自然排序
+        pkgs = sorted(pkgs, key=lambda p: (
+            0 if (str(p["status"] or "")).strip() in ("", "0") else 1,
+            natural_sort_key(p["series_name"] or "")
+        ))
         prod["packages"] = [dict(p) for p in pkgs]
         products.append(prod)
     regions = [r["region"] for r in db.execute("SELECT DISTINCT region FROM products WHERE region!='' ORDER BY region").fetchall()]
