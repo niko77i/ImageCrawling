@@ -7,22 +7,38 @@ var _crawledPackages = [];
 // ---------- 标签页切换 ----------
 
 function switchTab(tabName) {
+    localStorage.setItem("activeTab", tabName);
     // 更新导航激活态
     document.querySelectorAll(".nav-item").forEach((el, i) => {
-        el.classList.toggle("active", (tabName === "scrape" && i === 0) || (tabName === "video" && i === 1) || (tabName === "audio" && i === 2));
+        el.classList.toggle("active", (tabName === "youtube" && i === 0) || (tabName === "product" && i === 1) || (tabName === "scrape" && i === 2) || (tabName === "video" && i === 3) || (tabName === "toolkit" && i === 4));
     });
     // 切换面板
     document.getElementById("panel-scrape").classList.toggle("active", tabName === "scrape");
     document.getElementById("panel-video").classList.toggle("active", tabName === "video");
-    document.getElementById("panel-audio").classList.toggle("active", tabName === "audio");
+    document.getElementById("panel-toolkit").classList.toggle("active", tabName === "toolkit");
+    document.getElementById("panel-youtube").classList.toggle("active", tabName === "youtube");
+    document.getElementById("panel-product").classList.toggle("active", tabName === "product");
+    if (tabName === "product") { try { loadProducts(1); } catch(e) {} }
+}
+
+function switchToolkitTab(name) {
+    document.querySelectorAll(".tk-subtab").forEach(function(el) {
+        el.classList.toggle("active", el.getAttribute("data-tk") === name);
+    });
+    document.querySelectorAll(".tk-subpanel").forEach(function(el) {
+        el.style.display = el.id === "tk-" + name ? "block" : "none";
+    });
 }
 
 function parseUrls(input) {
-    // 先按换行分割，再按逗号分割，过滤空字符串
+    // 从脏数据中提取所有 Google Play http 链接
+    var matches = input.match(/https?:\/\/play\.google\.com\/[^\s,;，；\n]+/gi);
+    if (matches && matches.length > 0) return matches;
+    // 没有匹配到则回退到按分隔符分割
     return input
         .split(/[\n,]+/)
-        .map(s => s.trim())
-        .filter(s => s.length > 0);
+        .map(function (s) { return s.trim(); })
+        .filter(function (s) { return s.length > 0 && s.indexOf("http") === 0; });
 }
 
 async function startScrape() {
@@ -144,3 +160,11 @@ function _renderPackagePicker() {
     picker.appendChild(list);
     summaryEl.parentNode.insertBefore(picker, summaryEl.nextSibling);
 }
+
+// 页面加载时恢复上次标签（等所有脚本加载完）
+window.addEventListener("DOMContentLoaded", function() {
+    var saved = localStorage.getItem("activeTab");
+    // 兼容旧版本：audio 已移入工具集
+    if (saved === "audio") saved = "toolkit";
+    if (saved) switchTab(saved);
+});

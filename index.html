@@ -10,17 +10,19 @@
 
     <!-- ========== 侧边栏 ========== -->
     <nav class="sidebar">
-        <div class="sidebar-title">🖼️ 工具集</div>
-        <div class="nav-item active" onclick="switchTab('scrape')">📥 图片爬取</div>
+        <div class="sidebar-title">🖼️ 卡天皇莫乱来</div>
+        <div class="nav-item active" onclick="switchTab('youtube')">📺 视频管理</div>
+        <div class="nav-item" onclick="switchTab('product')">📦 产品管理</div>
+        <div class="nav-item" onclick="switchTab('scrape')">📥 图片爬取</div>
         <div class="nav-item" onclick="switchTab('video')">🎬 AI 视频生成</div>
-        <div class="nav-item" onclick="switchTab('audio')">🎵 音频替换</div>
+        <div class="nav-item" onclick="switchTab('toolkit')">🧰 工具集</div>
     </nav>
 
     <!-- ========== 主内容区 ========== -->
     <div class="main-content">
 
         <!-- ===== 爬取面板 ===== -->
-        <div id="panel-scrape" class="tab-panel active">
+        <div id="panel-scrape" class="tab-panel">
             <div class="panel-inner">
                 <h1>🖼️ Google Play 图片爬取工具</h1>
                 <p class="subtitle">批量输入 Google Play 链接，自动爬取并缩放图片至 Google Ads 规格</p>
@@ -178,7 +180,7 @@
                     <div class="settings-row" id="bgColorRow">
                         <div class="form-group">
                             <label>背景颜色</label>
-                            <input type="color" id="bgColor" value="#1a1a2e" style="height:38px;padding:2px 4px;cursor:pointer;" />
+                            <input type="color" id="bgColor" value="#f0ebe0" style="height:38px;padding:2px 4px;cursor:pointer;" />
                             <label class="checkbox-label" style="margin-top:6px;">
                                 <input type="checkbox" id="dynamicBg" onchange="toggleDynamicBg()" />
                                 动态背景
@@ -263,13 +265,16 @@
                         <div style="margin-top:6px;">
                             <label style="font-size:11px;">字体</label>
                             <div style="display:flex;gap:6px;">
-                                <select id="textFont" style="flex:1;">
+                                <select id="textFont" onchange="updateFontPreview()" style="flex:1;">
                                     <option value="simhei">黑体</option>
                                     <option value="msyh">微软雅黑</option>
                                     <option value="simsun">宋体</option>
                                     <option value="arial">Arial</option>
                                 </select>
                                 <button type="button" onclick="importFont()" style="width:44px;padding:8px;" title="导入字体">📂</button>
+                            </div>
+                            <div id="fontPreviewCard" style="margin-top:8px;display:none;background:var(--bg-root);border:1px solid var(--border-subtle);border-radius:4px;overflow:hidden;position:relative;">
+                                <div id="fontPreviewLive" style="padding:20px 24px;min-height:70px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:28px;word-break:break-word;"></div>
                             </div>
                             <span class="hint" id="fontCount"></span>
                         </div>
@@ -299,7 +304,7 @@
                     <!-- 等待中 -->
                     <h3>📋 等待中（<span id="taskQueuePendingCount">0</span>）</h3>
                     <div id="taskQueuePending"></div>
-                    <button id="generateAllBtn" onclick="generateAll()" style="margin-top:8px;background:var(--accent-green);color:#0c0c10;">⚡ 一键生成全部</button>
+                    <button id="generateAllBtn" onclick="generateAll()" style="margin-top:8px;background:var(--accent-green);color:#fff;">⚡ 一键生成全部</button>
                 </div>
 
                 <!-- 进度与结果 -->
@@ -312,7 +317,7 @@
             </div>
 
             <!-- 历史侧边栏 -->
-            <div id="historySidebar" style="width:220px;flex-shrink:0;background:var(--bg-surface);border:1px solid var(--border-subtle);padding:12px;max-height:80vh;overflow-y:auto;position:sticky;top:12px;">
+            <div id="historySidebar" style="position:fixed;top:40px;right:40px;width:220px;max-height:calc(100vh - 80px);overflow-y:auto;background:var(--bg-surface);border:1px solid var(--border-subtle);padding:12px;z-index:10;">
                 <h3 style="font-family:var(--font-mono);font-size:11px;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:8px;">📋 历史设置</h3>
                 <div id="historyList"></div>
                 <div style="margin-top:8px;">
@@ -323,34 +328,293 @@
 
         </div>
 
-        <!-- ===== 音频替换面板 ===== -->
-        <div id="panel-audio" class="tab-panel">
+        <!-- ===== YouTube 视频管理面板 ===== -->
+        <div id="panel-youtube" class="tab-panel active">
             <div class="panel-inner">
-                <h1>🎵 音频替换</h1>
-                <p class="subtitle">替换视频的音频轨道 — 支持音频文件或从视频提取音频</p>
+                <h1>📺 YouTube 视频管理</h1>
+                <p class="subtitle">管理 YouTube 视频链接，按地区/帧类型分类</p>
 
-                <div class="form-group">
-                    <label>🎬 原视频</label>
-                    <div style="display:flex;gap:6px;">
-                        <input type="text" id="audioVideoPath" placeholder="例如：F:\video\test.mp4" style="flex:1;" />
-                        <button type="button" onclick="browseFile('audioVideoPath','video')" style="width:44px;padding:10px;" title="选择视频">📂</button>
+                <!-- 子标签页 -->
+                <div style="display:flex;gap:0;margin-bottom:20px;border-bottom:1px solid var(--border-subtle);">
+                    <div class="yt-subtab active" onclick="switchYoutubeTab('view')" style="padding:8px 16px;cursor:pointer;font-family:var(--font-mono);font-size:12px;">📺 视频展示</div>
+                    <div class="yt-subtab" onclick="switchYoutubeTab('import')" style="padding:8px 16px;cursor:pointer;font-family:var(--font-mono);font-size:12px;">➕ 导入视频</div>
+                    <div class="yt-subtab" onclick="switchYoutubeTab('config')" style="padding:8px 16px;cursor:pointer;font-family:var(--font-mono);font-size:12px;">⚙ 标签配置</div>
+                </div>
+
+                <!-- 子面板：视频展示 -->
+                <div id="yt-view" class="yt-subpanel">
+                    <!-- 筛选栏：4 列均匀分布 -->
+                    <div class="yt-filter-row">
+                        <div class="form-group">
+                            <label>地区</label>
+                            <select id="ytFilterRegion" onchange="loadYoutubeList()">
+                                <option value="">全部地区</option>
+                                <option value="巴西">巴西</option>
+                                <option value="菲律宾">菲律宾</option>
+                                <option value="孟加拉">孟加拉</option>
+                                <option value="印尼">印尼</option>
+                                <option value="东南亚通用">东南亚通用</option>
+                                <option value="通用">通用</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>帧类型</label>
+                            <select id="ytFilterFrame" onchange="loadYoutubeList()">
+                                <option value="">全部帧类型</option>
+                                <option value="融帧">融帧</option>
+                                <option value="非融帧">非融帧</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>成效</label>
+                            <select id="ytFilterEff" onchange="loadYoutubeList()">
+                                <option value="">全部成效</option>
+                                <option value="成效">成效</option>
+                                <option value="一般">一般</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>产品名称</label>
+                            <select id="ytFilterProd" onchange="loadYoutubeList()">
+                                <option value="">全部产品</option>
+                                <option value="p222">p222</option>
+                                <option value="93ok">93ok</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- 操作栏 -->
+                    <div class="yt-action-row">
+                        <input type="text" id="ytSearch" placeholder="🔍 搜索链接或标题..." oninput="renderYoutubeList()" />
+                        <button onclick="clearSearch()" id="ytClearSearchBtn" style="display:none;">✕ 清空</button>
+                        <span onclick="toggleSelectAllYoutube()">☑ 全选</span>
+                        <span onclick="invertSelectionYoutube()">↔ 反选</span>
+                        <span onclick="deselectAllYoutube()">☐ 取消</span>
+                        <select id="ytBatchField" onchange="setupBatchEdit()">
+                            <option value="">批量修改...</option>
+                            <option value="region">地区</option>
+                            <option value="frame_type">帧类型</option>
+                            <option value="effectiveness">成效</option>
+                            <option value="product_name">产品名称</option>
+                        </select>
+                        <select id="ytBatchValue" onchange="batchEditSelected()" style="display:none;">
+                            <option value="">选值</option>
+                        </select>
+                        <span id="ytSelectedCount" style="color:var(--accent);font-size:12px;font-weight:600;margin-left:4px;">已选 0 条</span>
+                        <button onclick="copySelectedLinks()" style="width:auto;padding:6px 12px;font-size:11px;background:var(--accent-blue);color:#fff;">📋 复制链接</button>
+                        <span onclick="clearCopyHistory()" style="cursor:pointer;font-size:11px;color:var(--text-muted);margin-left:auto;" title="清除所有已复制标记">🗑 清除复制历史</span>
+                        <button onclick="deleteSelectedYoutube()" class="yt-btn-danger">🗑 删除选中</button>
+                    </div>
+
+                    <!-- 视频列表 + 播放器 -->
+                    <div class="yt-main">
+                        <div class="yt-list-col">
+                            <div id="ytVideoList"></div>
+                            <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;">
+                                <div id="ytPagination" style="flex:1;"></div>
+                                <select id="ytPageSize" onchange="changePageSize()" style="width:auto;padding:2px 4px;font-size:10px;margin-left:6px;">
+                                    <option value="10">10条</option>
+                                    <option value="20" selected>20条</option>
+                                    <option value="50">50条</option>
+                                    <option value="100">100条</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="yt-player-col">
+                            <div id="ytPlayer"><span>选择左侧视频播放</span></div>
+                            <div id="ytInfo"></div>
+                        </div>
                     </div>
                 </div>
 
-                <div class="form-group">
-                    <label>🎶 新音频源（音频或视频）</label>
-                    <div style="display:flex;gap:6px;">
-                        <input type="text" id="audioSourcePath" placeholder="例如：F:\music\bg.mp3 或 F:\video\source.mp4" style="flex:1;" />
-                        <button type="button" onclick="browseFile('audioSourcePath','audio')" style="width:44px;padding:10px;" title="选择音频或视频">📂</button>
+                <!-- 子面板：导入视频 -->
+                <div id="yt-import" class="yt-subpanel" style="display:none;">
+                    <div class="form-group">
+                        <label>YouTube 链接（每行一个）</label>
+                        <textarea id="ytUrls" rows="6" placeholder="https://www.youtube.com/watch?v=...&#10;https://youtu.be/..."></textarea>
                     </div>
-                    <span class="hint">支持 .mp3/.wav/.aac/.m4a 等音频，或 .mp4 等视频（自动提取音频）</span>
+                    <div class="settings-row">
+                        <div class="form-group">
+                            <label>地区</label>
+                            <select id="ytRegion">
+                                <option value="巴西">巴西</option>
+                                <option value="菲律宾">菲律宾</option>
+                                <option value="孟加拉">孟加拉</option>
+                                <option value="印尼">印尼</option>
+                                <option value="东南亚通用">东南亚通用</option>
+                                <option value="通用" selected>通用</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>帧类型</label>
+                            <select id="ytFrameType">
+                                <option value="融帧">融帧</option>
+                                <option value="非融帧" selected>非融帧</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>成效</label>
+                            <select id="ytEffectiveness">
+                                <option value="" selected>（不选）</option>
+                                <option value="成效">成效</option>
+                                <option value="一般">一般</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>产品名称</label>
+                            <select id="ytProductName">
+                                <option value="" selected>（不选）</option>
+                                <option value="p222">p222</option>
+                                <option value="93ok">93ok</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button id="ytImportBtn" onclick="importYoutube()">💾 保存视频</button>
+                    <div id="ytImportProgress" style="display:none;margin-top:8px;">
+                        <div class="progress-bar"><div id="ytImportFill" class="progress-fill" style="width:0%;"></div></div>
+                        <span id="ytImportStatus" style="font-size:11px;color:var(--text-secondary);"></span>
+                    </div>
+                    <div id="ytImportResult" style="margin-top:8px;font-size:12px;"></div>
                 </div>
 
-                <button id="audioReplaceBtn" onclick="startAudioReplace()">🎵 替换音频</button>
+                <!-- 子面板：标签配置 -->
+                <div id="yt-config" class="yt-subpanel" style="display:none;">
+                    <p class="subtitle" style="margin-bottom:16px;">自定义下拉框的值，修改后自动保存</p>
+                    <div class="settings-row">
+                        <div class="form-group">
+                            <label>地区选项</label>
+                            <textarea id="ytCfgRegion" rows="5" placeholder="每行一个"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>帧类型选项</label>
+                            <textarea id="ytCfgFrame" rows="5" placeholder="每行一个"></textarea>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>成效选项</label>
+                        <textarea id="ytCfgEff" rows="3" placeholder="每行一个（不含空选项）"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>产品名称选项</label>
+                        <textarea id="ytCfgProd" rows="3" placeholder="每行一个"></textarea>
+                    </div>
+                    <button onclick="saveYoutubeConfig()">💾 保存配置</button>
+                    <span id="ytCfgMsg" style="font-size:11px;color:var(--accent-green);margin-left:8px;"></span>
+                </div>
+            </div>
+        </div>
 
-                <div id="audioProgress" class="results" style="display:none;">
-                    <h3>⏳ 处理结果</h3>
-                    <div id="audioStatus"></div>
+        <!-- ===== 产品管理面板 ===== -->
+        <div id="panel-product" class="tab-panel">
+            <div class="panel-inner">
+                <h1>📦 产品管理</h1>
+                <p class="subtitle">管理产品、KPI、地区及包链接</p>
+                <div class="prod-toolbar">
+                    <div class="prod-toolbar-actions">
+                        <button onclick="showProductModal()" class="prod-btn-primary">➕ 新增产品</button>
+                        <button onclick="showCopyImportModal()" class="prod-btn-secondary">📋 复制导入</button>
+                    </div>
+                    <div class="prod-toolbar-filters">
+                        <select id="prodFilterRegion" onchange="loadProducts(1)" class="prod-filter-select">
+                            <option value="">全部地区</option>
+                        </select>
+                        <div class="prod-search-wrap">
+                            <input type="text" id="prodSearch" placeholder="搜索产品或 KPI..." oninput="loadProducts(1)" class="prod-search-input" />
+                            <span class="prod-search-icon">🔍</span>
+                        </div>
+                        <div class="prod-paused-toggle">
+                            <button id="prodToggleNormal" class="prod-toggle-option active" onclick="prodState.pausedMode=false;loadProducts(1);updatePausedToggle()">正常</button>
+                            <button id="prodTogglePaused" class="prod-toggle-option" onclick="prodState.pausedMode=true;loadProducts(1);updatePausedToggle()">已暂停</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="prodList"></div>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
+                    <div id="prodPagination" class="prod-pagination" style="flex:1;"></div>
+                    <select onchange="prodState.pageSize=parseInt(this.value);prodState.page=1;loadProducts(1);" style="width:auto;padding:4px 8px;font-size:11px;margin-left:12px;">
+                        <option value="5">5条/页</option>
+                        <option value="10" selected>10条/页</option>
+                        <option value="20">20条/页</option>
+                        <option value="50">50条/页</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== 工具集面板 ===== -->
+        <div id="panel-toolkit" class="tab-panel">
+            <div class="panel-inner">
+                <h1>🧰 工具集</h1>
+                <p class="subtitle">实用工具集合 — Google Ads 做表、音频替换等</p>
+
+                <!-- 子标签 -->
+                <div class="tk-subtabs">
+                    <div class="tk-subtab active" data-tk="zuobiao" onclick="switchToolkitTab('zuobiao')">📊 做表数据</div>
+                    <div class="tk-subtab" data-tk="audio" onclick="switchToolkitTab('audio')">🎵 音频替换</div>
+                </div>
+
+                <!-- ===== 子面板：做表数据 ===== -->
+                <div id="tk-zuobiao" class="tk-subpanel">
+                    <p style="color:var(--text-muted);margin-bottom:14px;font-size:13px;">粘贴包含"添加过滤条件"和"Total"的原始竖排数据（系统自动识别含 "US$" 的有效费用行）：</p>
+                    <textarea id="zbInputData" class="zb-textarea" placeholder="在此粘贴原始数据..."></textarea>
+
+                    <div class="zb-btn-row">
+                        <button onclick="zbProcessAll()">🚀 一键解析并生成所有报表</button>
+                        <button class="zb-btn-secondary" onclick="zbExportExcel()" id="zbExportBtn" disabled>📥 导出全部为 Excel</button>
+                    </div>
+
+                    <div id="zbErrorMessage" class="zb-error"></div>
+
+                    <div id="zbSectionRaw" style="display:none;">
+                        <h3 class="zb-section-title">
+                            📋 原始清洗数据 <span class="zb-badge" id="zbCountRaw">0</span>
+                            <button class="zb-copy-btn" onclick="zbCopyTableBody('zbTableRaw', this)">📋 一键复制</button>
+                        </h3>
+                        <div class="zb-table-wrap"><table id="zbTableRaw"></table></div>
+                    </div>
+
+                    <div id="zbSectionZuobiao" style="display:none;">
+                        <h3 class="zb-section-title">
+                            📑 做表数据 <span class="zb-badge" id="zbCountZuobiao">0</span>
+                            <button class="zb-copy-btn" onclick="zbCopyTableBody('zbTableZuobiao', this)">📋 一键复制</button>
+                        </h3>
+                        <div class="zb-table-wrap"><table id="zbTableZuobiao"></table></div>
+                    </div>
+
+                    <div id="zbSectionKehu" style="display:none;">
+                        <h3 class="zb-section-title">
+                            📈 客户表数据 <span class="zb-badge" id="zbCountKehu">0</span>
+                            <button class="zb-copy-btn" onclick="zbCopyTableBody('zbTableKehu', this)">📋 一键复制</button>
+                        </h3>
+                        <div class="zb-table-wrap"><table id="zbTableKehu"></table></div>
+                    </div>
+                </div>
+
+                <!-- ===== 子面板：音频替换 ===== -->
+                <div id="tk-audio" class="tk-subpanel" style="display:none;">
+                    <div class="form-group">
+                        <label>🎬 原视频</label>
+                        <div style="display:flex;gap:6px;">
+                            <input type="text" id="audioVideoPath" placeholder="例如：F:\video\test.mp4" style="flex:1;" />
+                            <button type="button" onclick="browseFile('audioVideoPath','video')" style="width:44px;padding:10px;" title="选择视频">📂</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>🎶 新音频源（音频或视频）</label>
+                        <div style="display:flex;gap:6px;">
+                            <input type="text" id="audioSourcePath" placeholder="例如：F:\music\bg.mp3 或 F:\video\source.mp4" style="flex:1;" />
+                            <button type="button" onclick="browseFile('audioSourcePath','audio')" style="width:44px;padding:10px;" title="选择音频或视频">📂</button>
+                        </div>
+                        <span class="hint">支持 .mp3/.wav/.aac/.m4a 等音频，或 .mp4 等视频（自动提取音频）</span>
+                    </div>
+
+                    <button id="audioReplaceBtn" onclick="startAudioReplace()">🎵 替换音频</button>
+
+                    <div id="audioProgress" class="results" style="display:none;">
+                        <h3>⏳ 处理结果</h3>
+                        <div id="audioStatus"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -360,5 +624,212 @@
     <script src="js/app.js"></script>
     <script src="js/video.js"></script>
     <script src="js/audio.js"></script>
+    <script src="js/youtube.js"></script>
+    <script src="js/product.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script>
+    // ===== 做表工具 JS（zb 命名空间） =====
+    var zbStore = { raw: [], zuobiao: [], kehu: [] };
+
+    function zbProcessAll() {
+        var input = document.getElementById('zbInputData').value.trim();
+        var errDiv = document.getElementById('zbErrorMessage');
+        errDiv.style.display = 'none';
+        ['raw','zuobiao','kehu'].forEach(function(k) {
+            document.getElementById('zbSection' + k.charAt(0).toUpperCase() + k.slice(1)).style.display = 'none';
+        });
+
+        if (!input) return zbShowError('请输入数据');
+
+        try {
+            var lines = input.split(/\r?\n/).map(function(l) { return l.trim(); }).filter(function(l) { return l !== ''; });
+            var startIndices = [];
+            lines.forEach(function(l, i) { if (l === '添加过滤条件') startIndices.push(i); });
+            if (startIndices.length === 0) throw new Error('未找到"添加过滤条件"');
+            var startIdx = startIndices[startIndices.length - 1];
+
+            var endIdx = lines.indexOf('Total');
+            if (endIdx === -1) throw new Error('未找到"Total"');
+            if (startIdx >= endIdx) throw new Error('数据顺序异常');
+
+            var validLines = lines.slice(startIdx + 1, endIdx);
+            var rows = [];
+            for (var i = 0; i < validLines.length; i += 10) {
+                var row = validLines.slice(i, i + 10);
+                if (row.length === 10 && /^\d{3}-\d{3}-\d{4}$/.test(row[1]) && row[4].indexOf('US$') > -1) {
+                    rows.push(row);
+                }
+            }
+            if (rows.length === 0) throw new Error('未找到有效数据（请确认费用列是否包含 "US$"）');
+
+            var rawData = rows.map(function(r) {
+                var camp = r[2].trim();
+                var lastDash = camp.lastIndexOf('-');
+                camp = lastDash > 0 ? camp.substring(0, lastDash).trim() : camp;
+                return {
+                    account: r[0], customerId: r[1], campaign: camp,
+                    cost: parseFloat(r[4].replace(/[^0-9.-]+/g, '')) || 0,
+                    impressions: parseInt(r[5].replace(/[^0-9]/g, '')) || 0,
+                    clicks: parseInt(r[6].replace(/[^0-9]/g, '')) || 0
+                };
+            });
+
+            var zbMap = new Map();
+            rawData.forEach(function(d) {
+                var key = d.customerId + '|||' + d.campaign;
+                if (!zbMap.has(key)) zbMap.set(key, { account: d.account, customerId: d.customerId, cost: d.cost, campaign: d.campaign });
+                else zbMap.get(key).cost += d.cost;
+            });
+            var zuobiaoData = Array.from(zbMap.values());
+
+            var khMap = new Map();
+            rawData.forEach(function(d) {
+                if (!khMap.has(d.campaign)) khMap.set(d.campaign, { campaign: d.campaign, cost: 0, impressions: 0, clicks: 0 });
+                var item = khMap.get(d.campaign);
+                item.cost += d.cost; item.impressions += d.impressions; item.clicks += d.clicks;
+            });
+            var kehuData = Array.from(khMap.values());
+
+            zbStore = { raw: rawData, zuobiao: zuobiaoData, kehu: kehuData };
+
+            zbRenderTable('raw', rawData, ['account','customerId','campaign','cost','impressions','clicks'], ['账号','客户ID','广告系列','费用','展示次数','点击次数']);
+            zbRenderTable('zuobiao', zuobiaoData, ['account','customerId','cost','campaign'], ['账号','客户ID','费用','广告系列'], { spacerAfter: 'cost', spacerCount: 4 });
+            zbRenderTable('kehu', kehuData, ['campaign','cost','impressions','clicks'], ['广告系列','费用','展示次数','点击次数']);
+
+            document.getElementById('zbExportBtn').disabled = false;
+        } catch (e) { zbShowError(e.message); }
+    }
+
+    function zbRenderTable(type, data, keys, headers, options) {
+        var sectionKey = type.charAt(0).toUpperCase() + type.slice(1);
+        if (type === 'raw') sectionKey = 'Raw';
+        if (type === 'zuobiao') sectionKey = 'Zuobiao';
+        if (type === 'kehu') sectionKey = 'Kehu';
+
+        document.getElementById('zbSection' + sectionKey).style.display = 'block';
+        document.getElementById('zbCount' + sectionKey).textContent = data.length;
+
+        var spacerAfter = (options || {}).spacerAfter;
+        var spacerCount = (options || {}).spacerCount || 0;
+
+        var headerHtml = '<thead><tr>';
+        headers.forEach(function(h, idx) {
+            headerHtml += '<th>' + h + '</th>';
+            if (spacerAfter && keys[idx] === spacerAfter) {
+                for (var s = 0; s < spacerCount; s++) headerHtml += '<th class="zb-empty-spacer"></th>';
+            }
+        });
+        headerHtml += '</tr></thead>';
+
+        var bodyHtml = '<tbody>';
+        data.forEach(function(item) {
+            bodyHtml += '<tr>';
+            keys.forEach(function(k, idx) {
+                if (['cost','impressions','clicks'].indexOf(k) > -1) {
+                    var val = k === 'cost' ? item[k].toFixed(2) : item[k].toLocaleString();
+                    bodyHtml += '<td class="zb-num">' + val + '</td>';
+                } else {
+                    bodyHtml += '<td>' + item[k] + '</td>';
+                }
+                if (spacerAfter && k === spacerAfter) {
+                    for (var s = 0; s < spacerCount; s++) bodyHtml += '<td class="zb-empty-spacer"></td>';
+                }
+            });
+            bodyHtml += '</tr>';
+        });
+        bodyHtml += '</tbody>';
+
+        document.getElementById('zbTable' + sectionKey).innerHTML = headerHtml + bodyHtml;
+    }
+
+    async function zbCopyTableBody(tableId, btn) {
+        var table = document.getElementById(tableId);
+        var tbody = table ? table.querySelector('tbody') : null;
+        if (!tbody) return;
+
+        var originalText = btn.textContent;
+        try {
+            // 只复制纯文本，避免带上暗色背景样式
+            var rows = tbody.querySelectorAll('tr');
+            var lines = [];
+            rows.forEach(function(tr) {
+                var cells = [];
+                tr.querySelectorAll('td').forEach(function(td) {
+                    cells.push((td.textContent || '').trim());
+                });
+                lines.push(cells.join('\t'));
+            });
+            var plainText = lines.join('\n');
+
+            var ta = document.createElement('textarea');
+            ta.value = plainText;
+            ta.style.position = 'fixed';
+            ta.style.left = '-9999px';
+            ta.style.top = '-9999px';
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+
+            btn.textContent = '✅ 已复制';
+            btn.classList.add('zb-copied');
+            setTimeout(function() {
+                btn.textContent = originalText;
+                btn.classList.remove('zb-copied');
+            }, 2000);
+        } catch (e) {
+            btn.textContent = '❌ 复制失败';
+            setTimeout(function() { btn.textContent = originalText; }, 2000);
+        }
+    }
+
+    function zbShowError(msg) {
+        var el = document.getElementById('zbErrorMessage');
+        el.textContent = msg; el.style.display = 'block';
+    }
+
+    function zbExportExcel() {
+        try {
+            var wb = XLSX.utils.book_new();
+
+            var normalSheets = [
+                { name: '原始清洗数据', data: zbStore.raw, keys: ['account','customerId','campaign','cost','impressions','clicks'], headers: ['账号','客户ID','广告系列','费用','展示次数','点击次数'] },
+                { name: '客户表数据', data: zbStore.kehu, keys: ['campaign','cost','impressions','clicks'], headers: ['广告系列','费用','展示次数','点击次数'] }
+            ];
+
+            normalSheets.forEach(function(s) {
+                var wsData = [s.headers].concat(s.data.map(function(d) { return s.keys.map(function(k) { return d[k]; }); }));
+                var ws = XLSX.utils.aoa_to_sheet(wsData);
+                zbSetNumFormat(ws, s.keys);
+                XLSX.utils.book_append_sheet(wb, ws, s.name);
+            });
+
+            var zbHeaders = ['账号','客户ID','费用','','','','','广告系列'];
+            var zbRows = zbStore.zuobiao.map(function(d) { return [d.account, d.customerId, d.cost, '', '', '', '', d.campaign]; });
+            var zbWsData = [zbHeaders].concat(zbRows);
+            var zbWs = XLSX.utils.aoa_to_sheet(zbWsData);
+            var zbRange = XLSX.utils.decode_range(zbWs['!ref']);
+            for (var R = 1; R <= zbRange.e.r; R++) {
+                var ref = XLSX.utils.encode_cell({ r: R, c: 2 });
+                if (zbWs[ref]) zbWs[ref].t = 'n';
+            }
+            XLSX.utils.book_append_sheet(wb, zbWs, '做表数据');
+
+            XLSX.writeFile(wb, 'Ads多维分析_' + new Date().getTime() + '.xlsx');
+        } catch (e) { zbShowError('导出失败: ' + e.message); }
+    }
+
+    function zbSetNumFormat(ws, keys) {
+        var range = XLSX.utils.decode_range(ws['!ref']);
+        var numCols = keys.map(function(k, i) { return ['cost','impressions','clicks'].indexOf(k) > -1 ? i : -1; }).filter(function(i) { return i >= 0; });
+        for (var R = 1; R <= range.e.r; R++) {
+            numCols.forEach(function(C) {
+                var ref = XLSX.utils.encode_cell({ r: R, c: C });
+                if (ws[ref]) ws[ref].t = 'n';
+            });
+        }
+    }
+    </script>
 </body>
 </html>

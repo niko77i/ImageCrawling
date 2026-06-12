@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 谷歌广告图片爬取与处理工具 — 从 Google Play 链接批量爬取图片，按 Google Ads 规格缩放，按包名分类保存。
 
+## 使用SKILLS的时机
+- 对于新增需求，使用 /superpowers 
+- 对于前端编写，使用 /frontend-design
+
 ## 技术栈
 
 - 前端：HTML + CSS + JavaScript（无框架，无构建工具）
@@ -154,6 +158,23 @@ from .scraper import scrape_images
 
 `main.py` 在顶层捕获这些异常并转为对应的 HTTP 错误响应。单张图片处理失败（ResizeError）不会中断其他图片。
 
+## 工作流规范（最高优先级）
+
+**所有新功能需求，必须先写设计文档，等用户确认后再动手写代码。** 此规则适用于所有模式（包括 Plan Mode、普通模式、fast mode 等），无例外。
+
+流程：
+1. 接到新需求 → 在 `docs/superpowers/specs/` 创建 `YYYY-MM-DD-<功能名>-design.md`
+2. 文档内容至少包含：需求描述、技术方案、涉及的 API/文件、数据结构、UI 交互
+3. 呈现给用户确认（可同时给出简要概述）
+4. 用户确认后 → 在 `docs/superpowers/plans/` 创建 `YYYY-MM-DD-<功能名>-plan.md`（实现计划）
+5. 按计划逐步实现
+
+**文档命名规范**：
+- 设计规格：`docs/superpowers/specs/YYYY-MM-DD-<功能名>-design.md`
+- 实现计划：`docs/superpowers/plans/YYYY-MM-DD-<功能名>-plan.md`
+
+**禁止事项**：未确认设计就直接改代码。简单 bug 修复、样式微调、配置变更不受此限制。
+
 ## 注意事项
 
 - `py/` 目录名可能与某些 Python 环境的 site-packages 冲突（如 pytest 的 `py.py`），`main.py` 已通过 `sys.path` 处理此问题
@@ -198,6 +219,7 @@ from .scraper import scrape_images
 - 开发模式：`ffmpeg.exe` 放项目根目录或系统 PATH 中
 - 打包模式：从 `sys._MEIPASS` 自动加载
 - Flask 需 `threaded=True`（视频生成在后台线程执行）
+- 打包之后，对于在生产模式需要保存的数据，都保存temp目录下，不同功能创建不同的文件进行保存
 
 ### 设计文档
 - 设计规格：[docs/superpowers/specs/2026-06-05-ai-video-generation-design.md](docs/superpowers/specs/2026-06-05-ai-video-generation-design.md)

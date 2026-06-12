@@ -317,37 +317,39 @@ class VideoTask:
                 # 字号按短边的 8% 计算（1080p 约 86px），加粗描边更清晰
                 font_size = max(int(min(W, H) * 0.08), 48)
 
-                # 预计算所有文案的时间，确保不重叠
+                # 预计算所有文案的时间，确保不重叠，且两条都能显示
                 text_timings = []
-                prev_end = 0.0
-                # 文案持续时长按视频总长比例计算（30%-50%），2-8 秒之间
-                base_dur = max(2.0, min(8.0, total_duration * 0.4))
-                min_dur = max(1.5, base_dur - 1.0)
-                max_dur = base_dur + 1.0
-                for ti in range(min(len(texts), 2)):
-                    earliest = max(1.0, prev_end + 0.5)
-                    if earliest + min_dur > total_duration - 0.5:
+                prev_end = 0.3  # 开头留 0.3s
+                text_count = min(len(texts), 2)
+                # 每条文案占视频时长比例：1条=40%, 2条=各30%
+                ratio = 0.30 if text_count == 2 else 0.40
+                base_dur = max(1.8, min(8.0, total_duration * ratio))
+                min_dur = max(1.5, base_dur - 0.5)
+                max_dur = min(base_dur + 0.5, total_duration * 0.45)
+                gap = 0.3  # 文案之间间隔 0.3s
+                for ti in range(text_count):
+                    earliest = max(0.5, prev_end + gap)
+                    # 至少需要 min_dur 展示时间
+                    if earliest + min_dur > total_duration - 0.3:
                         break
-                    avail = total_duration - 0.5 - earliest
+                    avail = total_duration - 0.3 - earliest
                     disp_dur = round(min(rng.uniform(min_dur, max_dur), avail), 1)
-                    latest = max(earliest, total_duration - 0.5 - disp_dur)
-                    start_t = round(rng.uniform(earliest, latest), 2) if latest > earliest else earliest
+                    start_t = round(rng.uniform(earliest, earliest + avail * 0.3), 2)
                     text_timings.append((start_t, disp_dur))
                     prev_end = start_t + disp_dur
 
                 for ti, (start_t, disp_dur) in enumerate(text_timings):
                     text = texts[ti]
-                    lines = self._wrap_text(text, font_size, W - 80)  # 左右留 40px 边距
+                    # PIL 精确测量宽度，用画面 85%
+                    safe_width = int(W * 0.85)
+                    lines = self._wrap_text(text, font_size, safe_width, font_file)
                     line_count = len(lines)
 
-                    # 位置：根据行数动态调整
                     line_height = int(font_size * 1.35)
                     if ti == 0:
-                        # 文案1：中上，多行时整体上移
                         base_y = max(0.08, 0.20 - line_count * 0.03)
                     else:
-                        # 文案2：中下，多行时整体下移
-                        base_y = max(0.45, 0.50 + line_count * 0.01)
+                        base_y = min(0.85, max(0.45, 0.50 + line_count * 0.01))
 
                     # alpha 表达式：淡入 0.3s + 停留 + 淡出 0.3s
                     fade_dur = 0.3
@@ -544,45 +546,60 @@ class VideoTask:
             return False
 
     @staticmethod
-    def _wrap_text(text: str, font_size: int, max_width: int) -> list[str]:
-        """智能换行：按单词/词组边界拆分，不割裂单词。
-        CJK 字符每个单独算，英文单词整体算。"""
+    def _wrap_text(text: str, font_size: int, max_width: int, font_file: str = None) -> list[str]:
+        """智能换行：用 PIL 精确测量文字宽度，适配任意字体。"""
         if not text:
             return []
-        # 每个字符的近似宽度（CJK ≈ font_size, Latin ≈ font_size * 0.55）
-        char_width = font_size * 0.6
-        max_chars = max(4, int(max_width / char_width))
-
-        # 分词：CJK 单字 + 拉丁单词
         import re
+
+        # PIL 精确测量文字宽度
+        pil_font = None
+        if font_file:
+            try:
+                from PIL import ImageFont
+                ff = font_file
+                if ff.startswith("/"):
+                    for drive in "CDEFGHIJKLMN":
+                        test = f"{drive}:{ff}"
+                        if os.path.isfile(test):
+                            ff = test; break
+                if os.path.isfile(ff):
+                    pil_font = ImageFont.truetype(ff, font_size)
+            except Exception:
+                pass
+
+        def _tw(s):
+            if pil_font:
+                try: return int(pil_font.getlength(s))
+                except Exception: pass
+            return len(s) * font_size * 0.75
+
         tokens = re.findall(r'[一-鿿　-〿＀-￯]|[a-zA-Z0-9]+|[^一-鿿\s]+|\s+', text)
 
         lines = []
         current = ""
         for token in tokens:
-            # 空格可合并
             if token.isspace():
                 if current and not current.endswith(" "):
                     current += " "
                 continue
-            # 仅拉丁单词太长也强制断
-            if len(token) > max_chars and token.isascii():
+            if _tw(token) > max_width and token.isascii():
                 while token:
-                    current += token[:max_chars]
-                    token = token[max_chars:]
-                    if token:
-                        lines.append(current.rstrip())
-                        current = ""
-            elif len(current) + len(token.rstrip()) <= max_chars:
+                    part = ""
+                    for ch in token:
+                        if _tw(part + ch) <= max_width: part += ch
+                        else: break
+                    if not part: part = token[0]; token = token[1:]
+                    else: token = token[len(part):]
+                    if token: lines.append((current + part).rstrip()); current = ""
+                    else: current += part
+            elif _tw(current + token) <= max_width:
                 current += token
             else:
-                if current.strip():
-                    lines.append(current.rstrip())
+                if current.strip(): lines.append(current.rstrip())
                 current = token
 
-        if current.strip():
-            lines.append(current.rstrip())
-
+        if current.strip(): lines.append(current.rstrip())
         return lines if lines else [text]
 
     @staticmethod

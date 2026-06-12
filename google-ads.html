@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Ads 报告</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --bg: #e8ecf1;
+            --surface: rgba(255,255,255,0.7);
+            --border: rgba(0,0,0,0.08);
+            --text: #1a1a2e;
+            --text2: #555770;
+            --text3: #8888a0;
+            --accent: #0891b2;
+            --red: #dc2626;
+            --green: #059669;
+            --radius: 10px;
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh; padding: 40px;
+            background-image:
+                radial-gradient(ellipse at 20% 0%, rgba(8,145,178,0.06) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 100%, rgba(37,99,235,0.04) 0%, transparent 50%);
+            background-attachment: fixed;
+        }
+        .container { max-width: 1100px; margin: 0 auto; }
+        h1 { font-size: 24px; margin-bottom: 24px; }
+        .card {
+            background: var(--surface);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 28px; margin-bottom: 20px;
+        }
+        .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+        .fg { display: flex; flex-direction: column; gap: 4px; }
+        .fg label { font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.04em; }
+        .fg input, .fg select {
+            padding: 10px 12px; border: 1px solid var(--border);
+            border-radius: 8px; font-size: 13px; background: rgba(0,0,0,0.02); color: var(--text);
+        }
+        .fg input:focus, .fg select:focus { outline: none; border-color: var(--accent); }
+        button {
+            padding: 10px 20px; border: none; border-radius: 8px;
+            font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+        }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { opacity: 0.9; }
+        .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-sm { background: rgba(0,0,0,0.04); color: var(--text2); padding: 6px 12px; font-size: 11px; }
+        .btn-sm:hover { background: rgba(0,0,0,0.08); }
+
+        .error { color: var(--red); background: rgba(220,38,38,0.06); padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; display: none; }
+        .success { color: var(--green); background: rgba(5,150,105,0.06); padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; }
+
+        .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { background: rgba(0,0,0,0.03); padding: 10px 12px; text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text2); border-bottom: 2px solid var(--border); white-space: nowrap; }
+        td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+        tr:hover { background: rgba(0,0,0,0.015); }
+        td.num { text-align: right; font-family: 'Courier New', monospace; }
+
+        .summary { margin-bottom: 16px; font-size: 13px; color: var(--text2); }
+        .toolbar { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; }
+
+        details { margin-bottom: 16px; }
+        details summary { cursor: pointer; font-size: 12px; color: var(--text3); user-select: none; }
+        details .cfg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; padding: 14px; background: rgba(0,0,0,0.02); border-radius: 8px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>📊 Google Ads 报告</h1>
+
+    <!-- 凭据配置（可折叠） -->
+    <details>
+        <summary>⚙️ API 凭据配置（点击展开）</summary>
+        <div class="cfg-grid">
+            <div class="fg"><label>Client ID</label><input id="cfgClientId" /></div>
+            <div class="fg"><label>Client Secret</label><input id="cfgClientSecret" type="password" /></div>
+            <div class="fg"><label>Refresh Token</label><input id="cfgRefreshToken" /></div>
+            <div class="fg"><label>Developer Token</label><input id="cfgDevToken" /></div>
+            <div class="fg"><label>经理账户 ID</label><input id="cfgManagerId" placeholder="230-247-9968" /></div>
+        </div>
+    </details>
+
+    <!-- 查询参数 -->
+    <div class="card">
+        <div class="row">
+            <div class="fg"><label>账号</label><select id="accountSelect"><option value="">先点"获取账号"</option></select></div>
+            <div class="fg"><label>开始日期</label><input type="date" id="startDate" /></div>
+            <div class="fg"><label>结束日期</label><input type="date" id="endDate" /></div>
+            <button class="btn-primary" onclick="fetchAccounts()">🔍 获取账号</button>
+            <button class="btn-primary" id="fetchBtn" onclick="fetchReport()">📥 拉取报告</button>
+        </div>
+    </div>
+
+    <!-- 提示信息 -->
+    <div id="msgError" class="error"></div>
+    <div id="msgSuccess" class="success" style="display:none;"></div>
+
+    <!-- 结果 -->
+    <div id="resultSection" style="display:none;">
+        <div class="toolbar">
+            <span id="resultSummary" class="summary"></span>
+            <button class="btn-sm" onclick="copyTable()">📋 复制表格</button>
+            <button class="btn-sm" onclick="exportExcel()">📥 导出 Excel</button>
+        </div>
+        <div class="table-wrap"><table id="resultTable"><thead></thead><tbody></tbody></table></div>
+    </div>
+</div>
+
+<script>
+var _reportRows = [];
+
+// 预填凭据
+document.getElementById("cfgClientId").value = "";
+document.getElementById("cfgClientSecret").value = "";
+document.getElementById("cfgRefreshToken").value = "";
+document.getElementById("cfgDevToken").value = "";
+document.getElementById("cfgManagerId").value = "";
+
+// 默认日期：昨天
+var d = new Date(); d.setDate(d.getDate() - 1);
+document.getElementById("endDate").value = d.toISOString().split("T")[0];
+d.setDate(d.getDate() - 6);
+document.getElementById("startDate").value = d.toISOString().split("T")[0];
+
+function _cfg() {
+    return {
+        client_id: document.getElementById("cfgClientId").value.trim(),
+        client_secret: document.getElementById("cfgClientSecret").value.trim(),
+        refresh_token: document.getElementById("cfgRefreshToken").value.trim(),
+        developer_token: document.getElementById("cfgDevToken").value.trim(),
+        manager_id: document.getElementById("cfgManagerId").value.trim(),
+    };
+}
+
+function showError(msg) {
+    var el = document.getElementById("msgError");
+    el.textContent = msg; el.style.display = "block";
+    document.getElementById("msgSuccess").style.display = "none";
+}
+
+function showSuccess(msg) {
+    var el = document.getElementById("msgSuccess");
+    el.textContent = msg; el.style.display = "block";
+    document.getElementById("msgError").style.display = "none";
+}
+
+async function fetchAccounts() {
+    var btn = event.target;
+    btn.disabled = true; btn.textContent = "⏳...";
+    try {
+        var r = await fetch("/api/google-ads/accounts", {
+            method: "POST", headers: {"Content-Type":"application/json"},
+            body: JSON.stringify(_cfg()),
+        });
+        var d = await r.json();
+        if (!d.success) { showError(d.error); return; }
+        var sel = document.getElementById("accountSelect");
+        sel.innerHTML = "";
+        d.accounts.forEach(function(a) {
+            var fmt = a.length === 10 ? a.slice(0,3)+"-"+a.slice(3,6)+"-"+a.slice(6) : a;
+            sel.innerHTML += '<option value="'+a+'">'+fmt+'</option>';
+        });
+        showSuccess("获取到 " + d.accounts.length + " 个账户");
+    } catch(e) {
+        showError("网络错误: " + e.message);
+    } finally {
+        btn.disabled = false; btn.textContent = "🔍 获取账号";
+    }
+}
+
+async function fetchReport() {
+    var btn = document.getElementById("fetchBtn");
+    btn.disabled = true; btn.textContent = "⏳ 拉取中...";
+    document.getElementById("resultSection").style.display = "none";
+    var account = document.getElementById("accountSelect").value;
+    var start = document.getElementById("startDate").value;
+    var end = document.getElementById("endDate").value;
+    if (!account) { showError("请先获取账号并选择"); btn.disabled = false; btn.textContent = "📥 拉取报告"; return; }
+    if (!start || !end) { showError("请选择日期"); btn.disabled = false; btn.textContent = "📥 拉取报告"; return; }
+    try {
+        var r = await fetch("/api/google-ads/report", {
+            method: "POST", headers: {"Content-Type":"application/json"},
+            body: JSON.stringify(Object.assign(_cfg(), {
+                account_id: account, start_date: start, end_date: end,
+            })),
+        });
+        var d = await r.json();
+        if (!d.success) { showError(d.error); return; }
+        _reportRows = d.rows || [];
+        if (_reportRows.length === 0) { showError("没有数据"); return; }
+        renderTable();
+        document.getElementById("resultSection").style.display = "block";
+        var totalCost = _reportRows.reduce(function(s,r){return s+r.cost;}, 0);
+        document.getElementById("resultSummary").textContent =
+            "共 " + _reportRows.length + " 个广告系列，总费用 $" + totalCost.toFixed(2);
+        document.getElementById("msgError").style.display = "none";
+    } catch(e) {
+        showError("网络错误: " + e.message);
+    } finally {
+        btn.disabled = false; btn.textContent = "📥 拉取报告";
+    }
+}
+
+function renderTable() {
+    var thead = document.querySelector("#resultTable thead");
+    var tbody = document.querySelector("#resultTable tbody");
+    var cols = [
+        {key:"customer_name", label:"账号"},
+        {key:"campaign_name", label:"广告系列"},
+        {key:"cost", label:"费用", num:true},
+        {key:"impressions", label:"展示", num:true},
+        {key:"clicks", label:"点击", num:true},
+        {key:"ctr", label:"点击率%", num:true},
+        {key:"conversions", label:"转化", num:true},
+        {key:"cpa", label:"CPA", num:true},
+    ];
+    thead.innerHTML = "<tr>" + cols.map(function(c){return "<th>"+c.label+"</th>";}).join("") + "</tr>";
+    tbody.innerHTML = _reportRows.map(function(r){
+        return "<tr>" + cols.map(function(c){
+            var v = r[c.key];
+            var cls = c.num ? ' class="num"' : "";
+            if (c.key === "cost" || c.key === "cpa") return "<td"+cls+">" + v.toFixed(2) + "</td>";
+            if (c.key === "ctr") return "<td"+cls+">" + v.toFixed(2) + "</td>";
+            if (c.num) return "<td"+cls+">" + v.toLocaleString() + "</td>";
+            return "<td>" + (v||"") + "</td>";
+        }).join("") + "</tr>";
+    }).join("");
+}
+
+function copyTable() {
+    var cols = ["账号","广告系列","费用","展示","点击","点击率%","转化","CPA"];
+    var text = cols.join("\t") + "\n" + _reportRows.map(function(r){
+        return [r.customer_name, r.campaign_name, r.cost.toFixed(2),
+                r.impressions, r.clicks, r.ctr.toFixed(2),
+                r.conversions.toFixed(2), r.cpa.toFixed(2)].join("\t");
+    }).join("\n");
+    var ta = document.createElement("textarea");
+    ta.value = text; ta.style.position = "fixed"; ta.style.left = "-9999px";
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    document.execCommand("copy"); document.body.removeChild(ta);
+    showToast("已复制");
+}
+
+function exportExcel() {
+    var cols = ["账号","广告系列","费用","展示","点击","点击率%","转化","CPA"];
+    var keys = ["customer_name","campaign_name","cost","impressions","clicks","ctr","conversions","cpa"];
+    var data = [cols].concat(_reportRows.map(function(r){ return keys.map(function(k){ return r[k]; }); }));
+    var ws = XLSX.utils.aoa_to_sheet(data);
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "报告");
+    XLSX.writeFile(wb, "GoogleAds_报告_"+new Date().toISOString().slice(0,10)+".xlsx");
+}
+
+function showToast(msg) {
+    var t = document.createElement("div");
+    t.textContent = msg;
+    t.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--accent);color:#fff;padding:8px 20px;border-radius:6px;font-size:13px;font-weight:600;z-index:9999;pointer-events:none;transition:opacity 0.3s;opacity:1;";
+    document.body.appendChild(t);
+    setTimeout(function(){t.style.opacity="0";setTimeout(function(){document.body.removeChild(t);},300);},1200);
+}
+</script>
+</body>
+</html>

@@ -114,6 +114,7 @@ async function loadFonts() {
             if (hint) hint.textContent = userCount > 0 ? "已导入 " + userCount + " 个自定义字体" : "可点击 📂 导入自定义字体";
         }
     } catch (e) {}
+    updateFontPreview();
 }
 
 async function importFont() {
@@ -128,8 +129,57 @@ async function importFont() {
     }
 }
 
+function updateFontPreview() {
+    var font = document.getElementById("textFont").value;
+    var card = document.getElementById("fontPreviewCard");
+    var live = document.getElementById("fontPreviewLive");
+    if (!font) return;
+
+    // 动态注入 @font-face
+    var styleId = "font-preview-style";
+    var styleEl = document.getElementById(styleId);
+    if (!styleEl) {
+        styleEl = document.createElement("style");
+        styleEl.id = styleId;
+        document.head.appendChild(styleEl);
+    }
+    var fontUrl = API_BASE + "/api/fonts/file/" + encodeURIComponent(font);
+    styleEl.textContent =
+        '@font-face {' +
+        '  font-family: "FontPreview";' +
+        '  src: local("' + font + '"), url("' + fontUrl + '") format("truetype");' +
+        '  font-display: swap;' +
+        '}';
+
+    // 取文案输入框的文字
+    var t1 = (document.getElementById("textOverlay1") || {}).value || "";
+    var t2 = (document.getElementById("textOverlay2") || {}).value || "";
+    var previewText = t1 || t2 || "字体预览 ABC 123";
+
+    // 渲染
+    if (live) {
+        live.style.fontFamily = '"FontPreview", sans-serif';
+        live.textContent = previewText;
+    }
+    if (card) card.style.display = "block";
+}
+
+// 文案输入框实时联动预览
+(function _hookFontPreviewInputs() {
+    var tid;
+    function debounce() {
+        clearTimeout(tid);
+        tid = setTimeout(updateFontPreview, 200);
+    }
+    var el1 = document.getElementById("textOverlay1");
+    var el2 = document.getElementById("textOverlay2");
+    if (el1) el1.addEventListener("input", debounce);
+    if (el2) el2.addEventListener("input", debounce);
+})();
+
 // 初始化时加载字体
 loadFonts();
+updateFontPreview();
 
 function toggleDynamicBg() {
     var checked = document.getElementById("dynamicBg").checked;
@@ -384,7 +434,7 @@ async function startGenerate() {
     var text2El = document.getElementById("textOverlay2");
 
     var bgImagePath = (bgImagePathEl && bgImagePathEl.value || "").trim();
-    var bgColor = (bgColorEl && bgColorEl.value || "#1a1a2e").replace("#", "");
+    var bgColor = (bgColorEl && bgColorEl.value || "#f0ebe0").replace("#", "");
     var contentScale = scaleEl ? (parseFloat(scaleEl.value) || 0.82) : 0.82;
     var text1 = (text1El && text1El.value || "").trim();
     var text2 = (text2El && text2El.value || "").trim();
@@ -612,13 +662,20 @@ async function loadHistoryList() {
         var packages = data.packages || {};
         Object.keys(packages).sort().forEach(function (pkg) {
             var entries = packages[pkg];
-            // 包名标题行（可删除整个包）
+            var pkgId = "hpkg_" + pkg.replace(/[^a-zA-Z0-9]/g, "_");
+            // 包名标题行（可收起/展开，可删除整个包）
             var header = document.createElement("div");
-            header.style.cssText = "display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:6px 8px;background:var(--bg-elevated);font-family:var(--font-mono);font-size:11px;font-weight:600;letter-spacing:0.04em;";
+            header.style.cssText = "display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding:6px 8px;background:var(--bg-elevated);font-family:var(--font-mono);font-size:11px;font-weight:600;letter-spacing:0.04em;cursor:pointer;";
+            header.setAttribute("data-pkg", pkgId);
             header.innerHTML =
-                '<span>📁 ' + pkg + ' (' + entries.length + ')</span>' +
-                '<span onclick="deletePackageHistory(\'' + pkg.replace(/'/g, "\\'") + '\')" style="cursor:pointer;color:var(--accent-red);font-size:10px;" title="删除此包的全部历史">🗑 删除</span>';
+                '<span onclick="var e=document.getElementById(\'entries_' + pkgId + '\');e.style.display=(e.style.display===\'none\'?\'block\':\'none\');this.parentNode.querySelector(\'.toggle-arrow\').textContent=(e.style.display===\'none\'?\'▶\':\'▼\')">' +
+                '<span class="toggle-arrow">▼</span> 📁 ' + pkg + ' (' + entries.length + ')</span>' +
+                '<span onclick="event.stopPropagation();deletePackageHistory(\'' + pkg.replace(/'/g, "\\'") + '\')" style="cursor:pointer;color:var(--accent-red);font-size:10px;" title="删除">🗑</span>';
             list.appendChild(header);
+
+            var body = document.createElement("div");
+            body.id = "entries_" + pkgId;
+            list.appendChild(body);
 
             entries.forEach(function (entry, i) {
                 var div = document.createElement("div");
@@ -630,8 +687,8 @@ async function loadHistoryList() {
                     (entry.outputPath ? entry.outputPath.split("/").pop().replace(".mp4","") : "?") +
                     ' · ' + (entry.selectedCount || "?") + '张' + (entry.useAI ? "·AI" : "") +
                     '</span>' +
-                    '<span onclick="deleteHistoryEntry(\'' + pkg.replace(/'/g, "\\'") + '\',' + i + ')" style="color:var(--accent-red);font-size:10px;cursor:pointer;">✕</span>';
-                list.appendChild(div);
+                    '<span onclick="event.stopPropagation();deleteHistoryEntry(\'' + pkg.replace(/'/g, "\\'") + '\',' + i + ')" style="color:var(--accent-red);font-size:10px;cursor:pointer;">✕</span>';
+                body.appendChild(div);
             });
         });
     } catch (e) {}
@@ -684,7 +741,7 @@ function _snapshotQueueBody() {
     var outputPath = document.getElementById("outputPath").value.trim();
     var musicPath = document.getElementById("musicPath").value.trim();
     var bgImagePath = (document.getElementById("bgImagePath") || {}).value || "";
-    var bgColor = (document.getElementById("bgColor") || {}).value || "#1a1a2e";
+    var bgColor = (document.getElementById("bgColor") || {}).value || "#f0ebe0";
     var useAI = document.getElementById("useAI").checked;
     var useLogo = document.getElementById("useLogo").checked;
     var text1 = document.getElementById("textOverlay1").value.trim();

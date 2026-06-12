@@ -120,3 +120,68 @@ models = ["kling-3.0", "seedance-2.0", "vidu-q3", "wan-2.2"]
 
 - ✅ `frontend-design` — 从 `claude-plugins-official` 官方 marketplace 安装成功
 - ⚠️ `fullstack-developer` — 不在官方和 superpowers marketplace 中，社区方案待确认
+
+- 当你使用 /frontend-design, 你是一个资深的前端设计，但只需要修改ui，不动逻辑
+
+## 要处理的脏数据
+- 系列名所在行，一般是“-”所连接的字符，删除特殊符号。一般都是多行包，同时复制进来，需要进行每个包区分，再取对应的系列名，链接，包名。以下脏数据，我都是使用的两行数据
+- 第一种：系列名种包含有多个“-”
+[2026/6/9 14:08] 老渔民 代投: 😀 FF345【神包】上线   ⚡️
+📱FF345-APK-24 三方回传：AD
+📱下户时区：巴西 -3时区【重要】
+📱应用名称：FF345Hue
+📱TT识别码：21pzdc6w
+📱APP包名：com.foldhueabc.logicjklmno
+📱APP链接：https://play.google.com/store/apps/details?id=com.foldhueabc.logicjklmno&
+[2026/6/9 14:08] 老渔民 代投: 😀 FF345【神包】上线   ⚡️
+📱FF345-APK-25 三方回传：AD
+📱下户时区：巴西 -3时区【重要】
+📱应用名称：GlyphGrid
+📱TT识别码：21cl7iim
+📱APP包名：com.glyphgridwqtep.designvzqxsb
+📱APP链接：https://play.google.com/store/apps/details?id=com.glyphgridwqtep.designvzqxsb&
+
+- 第二种：系列名中也包含了多个“-”，但脏数据也有多个“-”，但一般情况这种数据，系列名是在最前面的。
+[2026/6/9 23:08] 青稚 引流: 🔥神包上线：7274-apk-包37
+🔥APP名称：7274Muse
+🔥APP链接：https://play.google.com/store/apps/details?id=com.museweaveqwert.designasdfgh&
+🔥三方回传：AD
+🔥下户时区：-3时区【重要】
+🔥禁止使用注册送彩金、下载送彩金、免费旋转、别的站点LOGO，域名，等误导性虚假素材，如有发现，立即停止合作！
+🔥AD广告系列名称举例：⚠️7274-群编号-媒体-apk-包号⚠️
+🔥TT识别码215dxoip
+[2026/6/9 23:08] 青稚 引流: 🔥神包上线：7274-apk-包38
+🔥APP名称：7274Weave
+🔥APP链接：https://play.google.com/store/apps/details?id=com.hueweavexopjr.designtqchjz&
+🔥三方回传：AD
+🔥下户时区：-3时区【重要】
+🔥禁止使用注册送彩金、下载送彩金、免费旋转、别的站点LOGO，域名，等误导性虚假素材，如有发现，立即停止合作！
+🔥AD广告系列名称举例：⚠️7274-群编号-媒体-apk-包号⚠️
+🔥TT识别码21syx52u
+
+- 第三种：和第一种类似，但出现在最后。
+https://play.google.com/store/apps/details?id=com.Edgedod.game&gl=un&pli=1
+类名
+com.Edgedod.game.MainActivity
+包名
+com.Edgedod.game
+应用名：Edge dod-27包
+
+https://play.google.com/store/apps/details?id=com.evd.Sandevd&gl=un&pli=1
+类名
+com.timedblast.countdown.MainActivity
+包名
+com.evd.Sandevd
+应用名：Sand evd-28包
+
+- 第四种：没有“-”，系列名就是“：”后的，链接之外的那列
+谷歌11 名称：NexaPulse
+https://play.google.com/store/apps/details?id=com.nexapulsezfp.puzzlegmhxqwr&
+
+谷歌12 名称：Spin Prism Hit
+https://play.google.com/store/apps/details?id=com.spojig.SpinPrismHit&gl=un&pli=1
+
+- 第五种：只有一个链接，系列名就只用用包名
+https://play.google.com/store/apps/details?id=com.vibe.arc3&gl=un&pli=1
+
+- 第六种：我修改好的，第一列包含“-”的就是系列名

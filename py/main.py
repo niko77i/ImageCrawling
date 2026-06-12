@@ -16,16 +16,20 @@ from resizer import process_image, save_logo, ResizeError
 from utils import extract_package_name
 from video_processor import VideoTask, VideoError
 from ai_service import get_provider, AIServiceError
+# google_ads_service 按需加载，不打包进 EXE
 
 # 判断是否为 PyInstaller 打包模式
 _FROZEN = getattr(sys, "frozen", False)
 
 if _FROZEN:
-    # 打包后所有文件在 sys._MEIPASS 下
+    # 打包后所有静态文件在 sys._MEIPASS 下
     _FRONTEND_DIR = sys._MEIPASS
+    # 数据目录固定在 EXE 所在目录（而非临时解压目录）
+    _DATA_ROOT = os.path.dirname(sys.executable)
 else:
     # 开发模式：前端文件在 py/ 的上级目录
     _FRONTEND_DIR = os.path.dirname(_current_dir)
+    _DATA_ROOT = os.path.dirname(_current_dir)
 
 app = Flask(__name__, static_folder=_FRONTEND_DIR, static_url_path="")
 CORS(app)
@@ -324,7 +328,7 @@ def video_generate():
                 api_key = ai["api_key"]
                 custom_prompt = ai.get("prompt") or None
                 ai_videos = {}
-                ai_temp_dir = os.path.join(os.path.dirname(_current_dir), "temp", "ai_videos")
+                ai_temp_dir = os.path.join(_DATA_ROOT, "temp", "ai_videos")
                 os.makedirs(ai_temp_dir, exist_ok=True)
                 import shutil
                 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -494,7 +498,7 @@ def video_next_filename():
 
 # ---------- 视频设置历史 API ----------
 
-_VIDEO_HISTORY_DIR = os.path.join(os.path.dirname(_current_dir), "temp", "video_set")
+_VIDEO_HISTORY_DIR = os.path.join(_DATA_ROOT, "temp", "video_set")
 
 
 def _history_file(pkg: str) -> str:
@@ -591,11 +595,11 @@ def video_history_delete():
 # ---------- 字体管理 API ----------
 
 # 字体存储目录（项目根目录下 fonts/）
-_FONTS_DIR = os.path.join(os.path.dirname(_current_dir), "fonts")
+_FONTS_DIR = os.path.join(_DATA_ROOT, "fonts")
 
 
 def _scan_fonts_dir() -> list[dict]:
-    """扫描字体目录，返回所有可用字体列表。"""
+    """扫描字体目录，返回所有可用字体列表（最近使用排前）。"""
     fonts = []
     # 系统字体
     system_root = os.environ.get("SystemRoot", r"C:\Windows")
@@ -620,13 +624,155 @@ def _scan_fonts_dir() -> list[dict]:
                     "name": fid.replace("_", " ").title(),
                     "source": "user",
                 })
-    return fonts
+
+    # 读取最近使用记录，排在最前面
+    recent_file = os.path.join(_FONTS_DIR, ".recent.json")
+    recent = []
+    try:
+        import json
+        if os.path.isfile(recent_file):
+            with open(recent_file, "r") as rf:
+                recent = json.load(rf) or []
+    except Exception:
+        pass
+
+    # 创建 id→font 映射
+    font_map = {f["id"]: f for f in fonts}
+    # 最近使用排前面
+    result = []
+    for fid in recent:
+        if fid in font_map:
+            result.append(font_map.pop(fid))
+    # 其余字体
+    result.extend(font_map.values())
+    return result
+
+
+def _mark_font_used(font_id: str):
+    """标记字体为最近使用。"""
+    recent_file = os.path.join(_FONTS_DIR, ".recent.json")
+    recent = []
+    try:
+        import json
+        if os.path.isfile(recent_file):
+            with open(recent_file, "r") as f:
+                recent = json.load(f) or []
+    except Exception:
+        pass
+    # 移到最前
+    if font_id in recent:
+        recent.remove(font_id)
+    recent.insert(0, font_id)
+    recent = recent[:20]
+    with open(recent_file, "w") as f:
+        json.dump(recent, f)
 
 
 @app.route("/api/fonts/list", methods=["GET"])
 def fonts_list():
     """返回所有可用字体（系统 + 用户导入）。"""
     return jsonify({"success": True, "fonts": _scan_fonts_dir()})
+
+@app.route("/api/fonts/mark-used", methods=["POST"])
+def fonts_mark_used():
+    """标记字体为最近使用。"""
+    data = request.get_json(silent=True) or {}
+    font_id = (data.get("font") or "").strip()
+    if font_id:
+        _mark_font_used(font_id)
+    return jsonify({"success": True})
+
+
+
+
+@app.route("/api/fonts/preview", methods=["GET"])
+def fonts_preview():
+    """生成字体预览图片 — 排版精美的字体标本卡。"""
+    font_id = request.args.get("font", "simhei")
+    from io import BytesIO
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+    except ImportError:
+        return "", 500
+
+    # 加载字体
+    font_path = _find_font_path(font_id)
+    if not font_path:
+        return "", 404
+    try:
+        display_font = ImageFont.truetype(font_path, 64)
+        body_font = ImageFont.truetype(font_path, 26)
+        caption_font = ImageFont.truetype(font_path, 16)
+    except Exception:
+        return "", 500
+
+    # 画布 — 暖白底匹配浅色主题，留足呼吸空间
+    W, H = 560, 210
+    img = Image.new("RGB", (W, H), (254, 252, 249))
+    draw = ImageDraw.Draw(img)
+
+    # ---- 顶部强调色条 ----
+    draw.rectangle([(0, 0), (W, 3)], fill=(212, 133, 10))
+
+    # ---- 第一行：大字中文展示（标题级） ----
+    draw.text((24, 16), "字体样张", font=display_font, fill=(30, 27, 24))
+
+    # ---- 第二行：英文 + 数字 + 符号 —— 检验西文部分 ----
+    draw.text((24, 90), "ABCDEFGHIJKLM  abcdefghijklm  0123456789", font=body_font, fill=(92, 86, 79))
+
+    # ---- 分隔线 ----
+    draw.line([(24, 128), (W - 24, 128)], fill=(218, 212, 202), width=1)
+
+    # ---- 第三行：常用中文补充 + 字号标注 ----
+    draw.text((24, 138), "永和九年岁在癸丑暮春之初会于会稽山阴之兰亭", font=body_font, fill=(60, 55, 48))
+
+    # ---- 底部标签栏 ----
+    draw.text((24, 178), f"← {font_id}  ·  64px / 26px / 16px", font=caption_font, fill=(160, 155, 148))
+
+    # ---- 右下角装饰块 ----
+    draw.rectangle([(W - 32, H - 32), (W, H)], fill=(250, 245, 237), outline=(212, 133, 10))
+
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    from flask import send_file
+    return send_file(buf, mimetype="image/png", max_age=0)
+
+
+@app.route("/api/fonts/file/<font_id>", methods=["GET"])
+def fonts_file(font_id):
+    """将字体文件作为 Web 字体提供（供前端 CSS @font-face 使用）。"""
+    font_path = _find_font_path(font_id)
+    if not font_path:
+        return "", 404
+    from flask import send_file
+    ext = os.path.splitext(font_path)[1].lower()
+    mime_map = {".ttf": "font/ttf", ".otf": "font/otf", ".woff": "font/woff", ".woff2": "font/woff2", ".ttc": "font/collection"}
+    return send_file(font_path, mimetype=mime_map.get(ext, "application/octet-stream"), max_age=3600)
+
+
+def _find_font_path(font_id: str) -> str | None:
+    """根据字体 ID 查找完整路径。"""
+    import platform
+    system_root = os.environ.get("SystemRoot", r"C:\Windows")
+
+    # 用户字体
+    user_dir = os.path.join(_FONTS_DIR)
+    if os.path.isdir(user_dir):
+        for ext in (".ttf", ".otf", ".ttc", ".woff", ".woff2"):
+            p = os.path.join(user_dir, f"{font_id}{ext}")
+            if os.path.isfile(p):
+                return p
+
+    # 系统字体
+    if platform.system() == "Windows":
+        font_map = {"simhei": "simhei.ttf", "msyh": "msyh.ttc", "simsun": "simsun.ttc", "arial": "arial.ttf"}
+        fn = font_map.get(font_id, f"{font_id}.ttf")
+        p = os.path.join(system_root, "Fonts", fn)
+        if os.path.isfile(p):
+            return p
+
+    return None
 
 
 @app.route("/api/fonts/import", methods=["POST"])
@@ -638,36 +784,474 @@ def fonts_import():
     data = request.get_json(silent=True) or {}
     source = (data.get("source") or "").strip()
     if not source:
-        # 用对话框选择
-        filters = [
-            ("字体文件", "*.ttf;*.otf;*.ttc;*.woff;*.woff2"),
-            ("所有文件", "*.*"),
-        ]
-        source = _native_file_dialog(filters, "选择字体文件")
-        if not source:
+        # 用多文件选择对话框
+        sources = _multi_file_dialog("选择字体文件（可多选）")
+        if not sources:
             return jsonify({"success": True, "imported": 0, "message": "未选择文件"})
+    else:
+        sources = [source]
 
     os.makedirs(_FONTS_DIR, exist_ok=True)
     imported = 0
     import shutil
 
-    source_path = source.replace("\\", "/")
-    if os.path.isdir(source_path):
-        # 目录：导入所有字体
-        for root, dirs, files in os.walk(source_path):
-            for f in files:
-                if f.lower().endswith((".ttf", ".otf", ".ttc", ".woff", ".woff2")):
-                    dst = os.path.join(_FONTS_DIR, f)
-                    if not os.path.isfile(dst):
-                        shutil.copy2(os.path.join(root, f), dst)
-                    imported += 1
-    elif os.path.isfile(source_path) and source_path.lower().endswith((".ttf", ".otf", ".ttc", ".woff", ".woff2")):
-        dst = os.path.join(_FONTS_DIR, os.path.basename(source_path))
-        if not os.path.isfile(dst):
-            shutil.copy2(source_path, dst)
-        imported = 1
+    for sp in sources:
+        sp = sp.replace("\\", "/")
+        if os.path.isdir(sp):
+            for root, dirs, files in os.walk(sp):
+                for f in files:
+                    if f.lower().endswith((".ttf", ".otf", ".ttc", ".woff", ".woff2")):
+                        dst = os.path.join(_FONTS_DIR, f)
+                        if not os.path.isfile(dst):
+                            shutil.copy2(os.path.join(root, f), dst)
+                        imported += 1
+        elif os.path.isfile(sp) and sp.lower().endswith((".ttf", ".otf", ".ttc", ".woff", ".woff2")):
+            dst = os.path.join(_FONTS_DIR, os.path.basename(sp))
+            if not os.path.isfile(dst):
+                shutil.copy2(sp, dst)
+            imported += 1
 
     return jsonify({"success": True, "imported": imported, "fonts": _scan_fonts_dir()})
+
+
+
+# ---------- YouTube 视频管理 API (SQLite) ----------
+
+import re as _re
+import sqlite3 as _sqlite3
+import json as _json
+
+_YT_DB = os.path.join(_DATA_ROOT, "temp", "youtube.db")
+
+
+def _yt_db():
+    os.makedirs(os.path.dirname(_YT_DB), exist_ok=True)
+    conn = _sqlite3.connect(_YT_DB)
+    conn.row_factory = _sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("CREATE TABLE IF NOT EXISTS videos (id TEXT PRIMARY KEY, url TEXT, title TEXT, region TEXT, frame_type TEXT, effectiveness TEXT, product_name TEXT, imported_at TEXT)")
+    conn.execute("CREATE TABLE IF NOT EXISTS tags (key TEXT PRIMARY KEY, value TEXT)")
+    for k, v in [("regions", '["巴西","菲律宾","孟加拉","印尼","东南亚通用","通用"]'),
+                 ("frame_types", '["融帧","非融帧"]'),
+                 ("effectiveness", '["","成效","一般"]'),
+                 ("product_names", '["p222","93ok"]')]:
+        conn.execute("INSERT OR IGNORE INTO tags(key,value) VALUES(?,?)", (k, v))
+    return conn
+
+
+def _extract_youtube_id(url: str):
+    import re
+    m = re.search(r'(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/|youtube\.com/shorts/|m\.youtube\.com/watch\?v=)([a-zA-Z0-9_-]{11})', url)
+    return m.group(1) if m else None
+
+
+@app.route("/api/youtube/import", methods=["POST"])
+def youtube_import():
+    data = request.get_json(silent=True) or {}
+    urls = data.get("urls") or []
+    region = (data.get("region") or "通用").strip()
+    frame_type = (data.get("frame_type") or "非融帧").strip()
+    effectiveness = (data.get("effectiveness") or "").strip()
+    product_name = (data.get("product_name") or "").strip()
+    if not urls:
+        return jsonify({"success": False, "error": "请输入至少一个链接"}), 400
+
+    db = _yt_db()
+    imported = 0
+    duplicates = []
+    import datetime
+    import requests as _req
+
+    for url in urls:
+        url = url.strip()
+        if not url: continue
+        vid = _extract_youtube_id(url)
+        if not vid: continue
+        existing = db.execute("SELECT * FROM videos WHERE id=?", (vid,)).fetchone()
+        if existing:
+            duplicates.append(dict(existing))
+            continue
+        title = vid
+        try:
+            r = _req.get(f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={vid}&format=json", timeout=8)
+            if r.status_code == 200:
+                title = r.json().get("title", vid)
+        except Exception: pass
+
+        db.execute("INSERT INTO videos(id,url,title,region,frame_type,effectiveness,product_name,imported_at) VALUES(?,?,?,?,?,?,?,?)",
+                   (vid, f"https://www.youtube.com/watch?v={vid}", title, region, frame_type, effectiveness, product_name,
+                    datetime.datetime.now().strftime("%Y-%m-%d %H:%M")))
+        imported += 1
+
+    db.commit(); db.close()
+    return jsonify({"success": True, "imported": imported, "duplicates": duplicates})
+
+
+@app.route("/api/youtube/list", methods=["GET"])
+def youtube_list():
+    region = request.args.get("region", "").strip()
+    frame_type = request.args.get("frame_type", "").strip()
+    effectiveness = request.args.get("effectiveness", "").strip()
+    product_name = request.args.get("product_name", "").strip()
+
+    db = _yt_db()
+    where = []; params = []
+    for f, v in [("region", region), ("frame_type", frame_type), ("effectiveness", effectiveness), ("product_name", product_name)]:
+        if v: where.append(f"{f}=?"); params.append(v)
+
+    query = "SELECT * FROM videos"
+    if where: query += " WHERE " + " AND ".join(where)
+    query += " ORDER BY CASE effectiveness WHEN '成效' THEN 0 WHEN '一般' THEN 1 ELSE 2 END, imported_at DESC"
+
+    rows = db.execute(query, params).fetchall()
+    videos = [dict(r) for r in rows]
+
+    counts = {"region": {}, "frame_type": {}, "effectiveness": {}, "product_name": {}}
+    for v in videos:
+        for field in counts:
+            val = v.get(field, "") or ""
+            if val: counts[field][val] = counts[field].get(val, 0) + 1
+
+    db.close()
+    return jsonify({"success": True, "videos": videos, "counts": counts})
+
+
+@app.route("/api/youtube/delete", methods=["POST"])
+def youtube_delete():
+    data = request.get_json(silent=True) or {}
+    ids = data.get("ids") or []
+    if not ids: return jsonify({"success": False, "error": "未指定视频"}), 400
+    db = _yt_db()
+    for vid in ids: db.execute("DELETE FROM videos WHERE id=?", (vid,))
+    db.commit(); db.close()
+    return jsonify({"success": True})
+
+
+@app.route("/api/youtube/edit", methods=["POST"])
+def youtube_edit():
+    data = request.get_json(silent=True) or {}
+    vid = (data.get("id") or "").strip()
+    if not vid: return jsonify({"success": False, "error": "未指定视频ID"}), 400
+    db = _yt_db()
+    for f in ["region", "frame_type", "effectiveness", "product_name"]:
+        if f in data: db.execute(f"UPDATE videos SET {f}=? WHERE id=?", (data[f], vid))
+    db.commit()
+    row = db.execute("SELECT * FROM videos WHERE id=?", (vid,)).fetchone()
+    db.close()
+    return jsonify({"success": True, "video": dict(row)} if row else {"success": False, "error": "未找到"})
+
+
+@app.route("/api/youtube/tags", methods=["GET"])
+def youtube_tags_get():
+    db = _yt_db()
+    tags = {}
+    for r in db.execute("SELECT key, value FROM tags").fetchall():
+        try: tags[r["key"]] = _json.loads(r["value"])
+        except: tags[r["key"]] = []
+    db.close()
+    return jsonify({"success": True, "tags": tags})
+
+
+@app.route("/api/youtube/tags", methods=["POST"])
+def youtube_tags_save():
+    data = request.get_json(silent=True) or {}
+    new_regions = data.get("regions") or []
+    new_frames = data.get("frame_types") or []
+    new_effs = data.get("effectiveness") or []
+    new_prods = data.get("product_names") or []
+
+    db = _yt_db()
+    old_tags = {}
+    for r in db.execute("SELECT key, value FROM tags").fetchall():
+        try: old_tags[r["key"]] = _json.loads(r["value"])
+        except: pass
+    old_regions = old_tags.get("regions", [])
+    old_frames = old_tags.get("frame_types", [])
+    old_effs = [e for e in old_tags.get("effectiveness", []) if e]
+    old_prods = old_tags.get("product_names", [])
+
+    renames = {}; deleted_videos = []
+
+    for old_val, new_list, field_name in [(old_regions, new_regions, "region"), (old_frames, new_frames, "frame_type"), (old_effs, new_effs, "effectiveness"), (old_prods, new_prods, "product_name")]:
+        for i, old_val in enumerate(old_val):
+            if i < len(new_list) and new_list[i] != old_val:
+                renames[(field_name, old_val)] = new_list[i]
+            elif old_val not in new_list:
+                deleted_videos.append((field_name, old_val))
+
+    for (field, old_val), new_val in renames.items():
+        db.execute(f"UPDATE videos SET {field}=? WHERE {field}=?", (new_val, old_val))
+
+    affected = []
+    if deleted_videos:
+        for field, deleted_val in deleted_videos:
+            for r in db.execute(f"SELECT id, title FROM videos WHERE {field}=?", (deleted_val,)).fetchall():
+                affected.append({"id": r["id"], "title": r["title"] or r["id"], "field": field, "old_value": deleted_val})
+
+    for k, v in [("regions", new_regions), ("frame_types", new_frames), ("effectiveness", new_effs), ("product_names", new_prods)]:
+        db.execute("INSERT OR REPLACE INTO tags(key,value) VALUES(?,?)", (k, _json.dumps(v, ensure_ascii=False)))
+
+    db.commit(); db.close()
+    return jsonify({"success": True, "renamed": len(renames), "affected": affected})
+
+
+
+# ---------- 产品管理 API ----------
+
+import re as _re_prod
+
+def _init_product_tables(db):
+    db.execute("CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, product_name TEXT, kpi TEXT, region TEXT, status TEXT DEFAULT '', created_at TEXT)")
+    db.execute("CREATE TABLE IF NOT EXISTS packages (id INTEGER PRIMARY KEY AUTOINCREMENT, product_id INTEGER, series_name TEXT, package_name TEXT, url TEXT, status TEXT DEFAULT '', created_at TEXT, FOREIGN KEY(product_id) REFERENCES products(id))")
+    # 迁移：老库可能只有 is_paused 列，补上 status
+    for table in ["products", "packages"]:
+        cols = [r[1] for r in db.execute(f"PRAGMA table_info({table})").fetchall()]
+        if "is_paused" in cols and "status" not in cols:
+            db.execute(f"ALTER TABLE {table} RENAME COLUMN is_paused TO status")
+    db.commit()
+
+
+@app.route("/api/products/list", methods=["GET"])
+def products_list():
+    search = request.args.get("search", "").strip()
+    region = request.args.get("region", "").strip()
+    product_id = request.args.get("product_id", "").strip()
+    status_filter = request.args.get("status")  # None=不传, ""=正常, "paused"=暂停
+    page = int(request.args.get("page", 1) or 1)
+    size = int(request.args.get("size", 20) or 20)
+    db = _yt_db()
+    _init_product_tables(db)
+    where = []; params = []
+    if search:
+        where.append("(p.product_name LIKE ? OR p.kpi LIKE ?)")
+        params += [f"%{search}%", f"%{search}%"]
+    if region:
+        where.append("p.region = ?"); params.append(region)
+    if product_id:
+        where.append("p.id = ?"); params.append(product_id)
+    # 暂停筛选（None=不传不过滤, ""=正常产品, "paused"=暂停产品）
+    if status_filter is not None:
+        status_filter = status_filter.strip()
+        if status_filter:
+            where.append("p.status = ?"); params.append(status_filter)
+        else:
+            # 兼容旧数据 INTEGER 0（is_paused 迁移后）和新数据 TEXT ''
+            where.append("(p.status IS NULL OR p.status = '' OR p.status = '0' OR p.status = 0)")
+    sql = "SELECT p.* FROM products p"
+    if where: sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY p.created_at DESC LIMIT ? OFFSET ?"
+    rows = db.execute(sql, params + [size, (page - 1) * size]).fetchall()
+    count_sql = "SELECT COUNT(*) FROM products p"
+    if where: count_sql += " WHERE " + " AND ".join(where)
+    total = db.execute(count_sql, params).fetchone()[0]
+    products = []
+    for r in rows:
+        prod = dict(r)
+        pkgs = db.execute("SELECT * FROM packages WHERE product_id=? ORDER BY CASE WHEN status IS NULL OR status='' OR status='0' OR status=0 THEN 0 ELSE 1 END ASC, series_name COLLATE NOCASE ASC", (r["id"],)).fetchall()
+        prod["packages"] = [dict(p) for p in pkgs]
+        products.append(prod)
+    regions = [r["region"] for r in db.execute("SELECT DISTINCT region FROM products WHERE region!='' ORDER BY region").fetchall()]
+    db.close()
+    return jsonify({"success": True, "products": products, "total": total, "regions": regions})
+
+
+@app.route("/api/products/create", methods=["POST"])
+def products_create():
+    data = request.get_json(silent=True) or {}
+    product_name = (data.get("product_name") or "").strip()
+    kpi = (data.get("kpi") or "").strip()
+    region = (data.get("region") or "").strip()
+    packages = data.get("packages") or []
+    if not product_name:
+        return jsonify({"success": False, "error": "产品名不能为空"}), 400
+    db = _yt_db()
+    _init_product_tables(db)
+    import datetime
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    # 已有同名产品则追加包
+    existing = db.execute("SELECT id FROM products WHERE product_name=?", (product_name,)).fetchone()
+    if existing:
+        pid = existing["id"]
+    else:
+        db.execute("INSERT INTO products(product_name,kpi,region,created_at) VALUES(?,?,?,?)", (product_name, kpi, region, now))
+        pid = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+    for p in packages:
+        pkg_name = p.get("package_name","")
+        pkg_url = p.get("url","")
+        # 同一产品下，包名+链接相同 = 同一个包，只更新系列名
+        existing_pkg = db.execute(
+            "SELECT id FROM packages WHERE product_id=? AND package_name=? AND url=?",
+            (pid, pkg_name, pkg_url)
+        ).fetchone()
+        if existing_pkg:
+            db.execute("UPDATE packages SET series_name=? WHERE id=?",
+                       (p.get("series_name",""), existing_pkg["id"]))
+        else:
+            db.execute("INSERT INTO packages(product_id,series_name,package_name,url,created_at) VALUES(?,?,?,?,?)",
+                       (pid, p.get("series_name",""), pkg_name, pkg_url, now))
+    db.commit(); db.close()
+    return jsonify({"success": True, "id": pid})
+
+
+@app.route("/api/products/<int:pid>", methods=["PUT"])
+def products_update(pid):
+    data = request.get_json(silent=True) or {}
+    db = _yt_db()
+    _init_product_tables(db)
+    for f in ["product_name", "kpi", "region", "status"]:
+        if f in data:
+            db.execute(f"UPDATE products SET {f}=? WHERE id=?", (data[f], pid))
+    db.commit(); db.close()
+    return jsonify({"success": True})
+
+
+@app.route("/api/products/<int:pid>", methods=["DELETE"])
+def products_delete(pid):
+    db = _yt_db()
+    _init_product_tables(db)
+    db.execute("DELETE FROM packages WHERE product_id=?", (pid,))
+    db.execute("DELETE FROM products WHERE id=?", (pid,))
+    db.commit(); db.close()
+    return jsonify({"success": True})
+
+
+@app.route("/api/products/<int:pid>/packages", methods=["POST"])
+def products_add_package(pid):
+    data = request.get_json(silent=True) or {}
+    series_name = (data.get("series_name") or "").strip()
+    package_name = (data.get("package_name") or "").strip()
+    url = (data.get("url") or "").strip()
+    if not package_name:
+        return jsonify({"success": False, "error": "包名不能为空"}), 400
+    db = _yt_db()
+    _init_product_tables(db)
+    import datetime
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    # 同一产品下，包名+链接相同 = 同一个包，只更新系列名
+    existing = db.execute(
+        "SELECT id FROM packages WHERE product_id=? AND package_name=? AND url=?",
+        (pid, package_name, url)
+    ).fetchone()
+    if existing:
+        db.execute("UPDATE packages SET series_name=? WHERE id=?",
+                   (series_name, existing["id"]))
+    else:
+        db.execute("INSERT INTO packages(product_id,series_name,package_name,url,created_at) VALUES(?,?,?,?,?)",
+                   (pid, series_name, package_name, url, now))
+    db.commit(); db.close()
+    return jsonify({"success": True})
+
+
+@app.route("/api/products/packages/<int:pkg_id>", methods=["PUT"])
+def products_update_package(pkg_id):
+    data = request.get_json(silent=True) or {}
+    db = _yt_db()
+    _init_product_tables(db)
+    for f in ["series_name", "package_name", "url", "status"]:
+        if f in data:
+            db.execute(f"UPDATE packages SET {f}=? WHERE id=?", (data[f], pkg_id))
+    db.commit(); db.close()
+    return jsonify({"success": True})
+
+
+@app.route("/api/products/packages/<int:pkg_id>", methods=["DELETE"])
+def products_delete_package(pkg_id):
+    db = _yt_db()
+    _init_product_tables(db)
+    db.execute("DELETE FROM packages WHERE id=?", (pkg_id,))
+    db.commit(); db.close()
+    return jsonify({"success": True})
+
+
+@app.route("/api/products/import-text", methods=["POST"])
+def products_import_text():
+    data = request.get_json(silent=True) or {}
+    text = (data.get("text") or "").strip()
+    product_name = (data.get("product_name") or "").strip()
+    kpi = (data.get("kpi") or "").strip()
+    region = (data.get("region") or "").strip()
+    prefix = (data.get("prefix") or "").strip()
+    suffix = (data.get("suffix") or "").strip()
+    if not text:
+        return jsonify({"success": False, "error": "未提供文本内容"}), 400
+    links = _re_prod.findall(r'https?://play\.google\.com/store/apps/details\?id=[\w.&=/\-?%]+', text)
+    results = []
+    for link in links:
+        pkg = _extract_pkg_from_url(link)
+        series = _guess_series(text, link)
+        if prefix:
+            # 如果系列名已经以完整前缀开头，不再重复添加
+            if not series.startswith(prefix):
+                prefix_base = prefix.split("-")[0]
+                series_base = series.split("-")[0] if "-" in series else series
+                if prefix_base == series_base:
+                    rest = series[len(series_base):].lstrip("-")
+                    sep = "" if prefix.endswith("-") else "-"
+                    series = prefix + sep + rest if rest else prefix
+                else:
+                    sep = "" if prefix.endswith("-") else "-"
+                    series = prefix + sep + series
+        if suffix:
+            # 如果系列名已经以后缀结尾，不再重复添加
+            if not series.endswith("-" + suffix) and series != suffix:
+                series = series + "-" + suffix
+        results.append({"series_name": series, "package_name": pkg, "url": link})
+    return jsonify({"success": True, "parsed": results})
+
+
+def _extract_pkg_from_url(url):
+    m = _re_prod.search(r'[?&]id=([\w.]+)', url)
+    return m.group(1) if m else ""
+
+
+def _guess_series(text, link):
+    """从文本猜测链接对应的系列名。"""
+    lines = text.split("\n")
+    link_idx = -1
+    for i, line in enumerate(lines):
+        if link in line:
+            link_idx = i; break
+    if link_idx < 0:
+        return _extract_pkg_from_url(link)
+    # 类型2（优先：更具体的"神包上线"格式，必须在类型1之前）
+    for j in range(max(0, link_idx - 8), link_idx):
+        l = lines[j].strip()
+        if "神包上线" in l:
+            name = l.split("神包上线：")[-1].split("神包上线")[-1].strip()
+            if name: return name
+    # 类型1：含APK或包号的行（排除"神包上线"以免误匹配）
+    for j in range(link_idx, max(-1, link_idx - 10), -1):
+        l = lines[j].strip()
+        if "神包上线" in l: continue
+        if ("APK" in l or ("包" in l and _re_prod.search(r'包\d+', l))) and "-" in l:
+            for token in l.split():
+                token = _re_prod.sub(r'^[^\w]*', '', token)
+                if '-' in token and len(token) > 2:
+                    return token
+    # 类型3：应用名在链接之后（只向下搜索，窗口缩小到链接后4行内）
+    for j in range(link_idx + 1, min(len(lines), link_idx + 6)):
+        l = lines[j].strip()
+        if "应用名：" in l or "应用名:" in l:
+            name = l.split("应用名：")[-1].split("应用名:")[-1].strip()
+            if name: return name
+    # 类型4
+    for j in range(max(0, link_idx - 3), min(len(lines), link_idx)):
+        l = lines[j].strip()
+        if "名称：" in l or "名称:" in l:
+            name = l.split("名称：")[-1].split("名称:")[-1].strip()
+            if name: return name
+    # 类型6：第一列包含"-"的就是系列名
+    for j in range(link_idx, max(-1, link_idx - 3), -1):
+        l = lines[j].strip()
+        tokens = l.split()
+        if tokens:
+            first = _re_prod.sub(r'^[^\w]*', '', tokens[0])
+            if '-' in first and len(first) > 2:
+                return first
+
+    # 类型5
+    return _extract_pkg_from_url(link)
 
 
 # ---------- 文件浏览 API ----------
@@ -692,132 +1276,215 @@ def _resolve_initial_dir(path: str) -> str | None:
     return None
 
 
-def _native_file_dialog(filter_tuples: list, title: str = "选择文件", initial_dir: str = None) -> str | None:
-    """打开文件选择对话框。优先 PowerShell（独立窗口，任何环境下都可用）。"""
-    start_dir = _resolve_initial_dir(initial_dir) if initial_dir else None
-    # PowerShell 优先（独立窗口进程，后台/nohup 也能弹窗）
-    filter_str = "|".join(f"{name}|{ext}" for name, ext in filter_tuples)
-    result = _ps_file_dialog(filter_str, title, start_dir)
-    if result:
-        return result
-    # tkinter 回退（进程内，快但需要 GUI 上下文）
-    try:
-        import tkinter.filedialog as fd
-        import tkinter as tk
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes("-topmost", True)
-        kwargs = {"title": title, "filetypes": filter_tuples}
-        if start_dir:
-            kwargs["initialdir"] = start_dir
-        path = fd.askopenfilename(**kwargs)
-        root.destroy()
-        return path.replace("/", "\\") if path else None
-    except Exception:
-        return None
 
-
-def _native_save_dialog(title: str = "保存文件", initial_dir: str = None) -> str | None:
-    """打开保存文件对话框。"""
-    start_dir = _resolve_initial_dir(initial_dir) if initial_dir else None
-    result = _ps_save_dialog(title, start_dir)
-    if result:
-        return result
-    try:
-        import tkinter.filedialog as fd
-        import tkinter as tk
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes("-topmost", True)
-        kwargs = {"title": title, "defaultextension": ".mp4",
-                   "filetypes": [("MP4 文件", "*.mp4"), ("所有文件", "*.*")]}
-        if start_dir:
-            kwargs["initialdir"] = start_dir
-        path = fd.asksaveasfilename(**kwargs)
-        root.destroy()
-        return path.replace("/", "\\") if path else None
-    except Exception:
-        return None
-
-
-def _native_folder_dialog(title: str = "选择文件夹", initial_dir: str = None) -> str | None:
-    """打开文件夹选择对话框。"""
-    start_dir = _resolve_initial_dir(initial_dir) if initial_dir else None
-    result = _ps_folder_dialog(title, start_dir)
-    if result:
-        return result
-    try:
-        import tkinter.filedialog as fd
-        import tkinter as tk
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes("-topmost", True)
-        kwargs = {"title": title}
-        if start_dir:
-            kwargs["initialdir"] = start_dir
-        path = fd.askdirectory(**kwargs)
-        root.destroy()
-        return path.replace("/", "\\") if path else None
-    except Exception:
-        return None
-
-
-def _ps_file_dialog(filter_str: str, title: str = "选择文件", initial_dir: str = None) -> str | None:
-    init = f'$d.InitialDirectory = "{initial_dir.replace("/", "\\")}";' if initial_dir else ""
+def _ps_file_dialog_fast(filter_str, title="选择文件", start_dir=None):
+    init = f"$d.InitialDirectory = '{start_dir.replace('/', '\\')}';" if start_dir else ""
     ps = f'''
 Add-Type -AssemblyName System.Windows.Forms
-$d = New-Object System.Windows.Forms.OpenFileDialog
-$d.Title = "{title}"
-$d.Filter = "{filter_str}"
-{init}
-if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ $d.FileName }}
+$d=New-Object System.Windows.Forms.OpenFileDialog
+$d.Title="{title}";$d.Filter="{filter_str}";{init}
+if($d.ShowDialog()-eq[System.Windows.Forms.DialogResult]::OK){{$d.FileName}}
 '''
     try:
-        out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=120)
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
+                           capture_output=True, text=True, timeout=120)
         return out.stdout.strip() or None
-    except Exception:
-        return None
+    except: return None
 
-
-def _ps_save_dialog(title: str = "保存文件", initial_dir: str = None) -> str | None:
-    init = f'$d.InitialDirectory = "{initial_dir.replace("/", "\\")}";' if initial_dir else ""
+def _ps_save_dialog_fast(title="保存文件", start_dir=None):
+    init = f"$d.InitialDirectory = '{start_dir.replace('/', '\\')}';" if start_dir else ""
     ps = f'''
 Add-Type -AssemblyName System.Windows.Forms
-$d = New-Object System.Windows.Forms.SaveFileDialog
-$d.Title = "{title}"
-$d.Filter = "MP4 文件 (*.mp4)|*.mp4|所有文件 (*.*)|*.*"
-$d.DefaultExt = ".mp4"
-{init}
-if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ $d.FileName }}
+$d=New-Object System.Windows.Forms.SaveFileDialog
+$d.Title="{title}";$d.Filter="MP4文件|*.mp4|所有文件|*.*";$d.DefaultExt=".mp4";{init}
+if($d.ShowDialog()-eq[System.Windows.Forms.DialogResult]::OK){{$d.FileName}}
 '''
     try:
-        out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=120)
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
+                           capture_output=True, text=True, timeout=120)
         return out.stdout.strip() or None
-    except Exception:
-        return None
+    except: return None
 
-
-def _ps_folder_dialog(title: str = "选择文件夹", initial_dir: str = None) -> str | None:
-    init = ""
-    if initial_dir:
-        # 用 <ctrl>+<shift> 导航：先设置 RootFolder 为计算机，再设 SelectedPath
-        ps_dir = initial_dir.replace("/", "\\")
-        init = f'''
-$d.RootFolder = [Environment+SpecialFolder]::MyComputer
-$d.SelectedPath = "{ps_dir}"
-'''
+def _ps_folder_dialog_fast(title="选择文件夹", start_dir=None):
+    init = f"$d.SelectedPath = '{start_dir.replace('/', '\\')}';" if start_dir else ""
     ps = f'''
 Add-Type -AssemblyName System.Windows.Forms
-$d = New-Object System.Windows.Forms.FolderBrowserDialog
-$d.Description = "{title}"
-{init}
-if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {{ $d.SelectedPath }}
+$d=New-Object System.Windows.Forms.FolderBrowserDialog
+$d.Description="{title}";{init}
+if($d.ShowDialog()-eq[System.Windows.Forms.DialogResult]::OK){{$d.SelectedPath}}
 '''
     try:
-        out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=120)
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
+                           capture_output=True, text=True, timeout=120)
         return out.stdout.strip() or None
+    except: return None
+
+def _win32_file_dialog(filter_tuples, title="选择文件", initial_dir=None, multi=False):
+    """Windows API 原生文件对话框 — ctypes 秒开零依赖。"""
+    import ctypes as ct
+    from ctypes import wintypes as w
+
+    start_dir = _resolve_initial_dir(initial_dir) if initial_dir else None
+    null = chr(0)
+
+    # 构建过滤字符串
+    filter_parts = []
+    for name, ext in filter_tuples:
+        filter_parts.append(name)
+        filter_parts.append(ext)
+    filter_str = null.join(filter_parts) + null + null
+
+    buf_size = 260 if not multi else 26000
+    buf = ct.create_unicode_buffer(buf_size)
+
+    class OFN(ct.Structure):
+        _fields_ = [
+            ("lStructSize", w.DWORD), ("hwndOwner", w.HWND), ("hInstance", w.HINSTANCE),
+            ("lpstrFilter", w.LPCWSTR), ("lpstrCustomFilter", w.LPWSTR),
+            ("nMaxCustFilter", w.DWORD), ("nFilterIndex", w.DWORD),
+            ("lpstrFile", w.LPWSTR), ("nMaxFile", w.DWORD),
+            ("lpstrFileTitle", w.LPWSTR), ("nMaxFileTitle", w.DWORD),
+            ("lpstrInitialDir", w.LPCWSTR), ("lpstrTitle", w.LPCWSTR),
+            ("Flags", w.DWORD), ("nFileOffset", w.WORD), ("nFileExtension", w.WORD),
+            ("lpstrDefExt", w.LPCWSTR), ("lCustData", w.LPARAM),
+            ("lpfnHook", w.LPVOID), ("lpTemplateName", w.LPCWSTR),
+        ]
+
+    ofn = OFN()
+    ofn.lStructSize = ct.sizeof(OFN)
+    ofn.hwndOwner = ct.windll.user32.GetForegroundWindow()
+    ofn.lpstrFilter = filter_str
+    ofn.lpstrFile = ct.cast(buf, w.LPWSTR)
+    ofn.nMaxFile = ct.sizeof(buf) // ct.sizeof(w.WCHAR)
+    ofn.lpstrTitle = title
+    if start_dir: ofn.lpstrInitialDir = start_dir
+    ofn.Flags = 0x80000 | 0x1000 | 0x800 | 0x4  # explorer + filemustexist + pathmustexist + hidereadonly
+    if multi: ofn.Flags |= 0x200 | 0x20000  # allowmultiselect
+
+    try:
+        ok = ct.windll.comdlg32.GetOpenFileNameW(ct.byref(ofn))
+        if ok:
+            if multi:
+                raw = buf.value
+                parts = raw.split(null)
+                if len(parts) > 2:
+                    return [os.path.join(parts[0], p) for p in parts[1:] if p]
+                return [raw] if raw else []
+            return buf.value or None
     except Exception:
-        return None
+        pass
+    return None if not multi else []
+
+
+def _win32_save_dialog(title="保存文件", initial_dir=None):
+    """Windows API 原生保存文件对话框。"""
+    import ctypes as ct
+    from ctypes import wintypes as w
+
+    start_dir = _resolve_initial_dir(initial_dir) if initial_dir else None
+    null = chr(0)
+    filter_str = "MP4 文件" + null + "*.mp4" + null + "所有文件" + null + "*.*" + null + null
+
+    buf = ct.create_unicode_buffer(260)
+
+    class OFN(ct.Structure):
+        _fields_ = [
+            ("lStructSize", w.DWORD), ("hwndOwner", w.HWND), ("hInstance", w.HINSTANCE),
+            ("lpstrFilter", w.LPCWSTR), ("lpstrCustomFilter", w.LPWSTR),
+            ("nMaxCustFilter", w.DWORD), ("nFilterIndex", w.DWORD),
+            ("lpstrFile", w.LPWSTR), ("nMaxFile", w.DWORD),
+            ("lpstrFileTitle", w.LPWSTR), ("nMaxFileTitle", w.DWORD),
+            ("lpstrInitialDir", w.LPCWSTR), ("lpstrTitle", w.LPCWSTR),
+            ("Flags", w.DWORD), ("nFileOffset", w.WORD), ("nFileExtension", w.WORD),
+            ("lpstrDefExt", w.LPCWSTR), ("lCustData", w.LPARAM),
+            ("lpfnHook", w.LPVOID), ("lpTemplateName", w.LPCWSTR),
+        ]
+
+    ofn = OFN()
+    ofn.lStructSize = ct.sizeof(OFN)
+    ofn.hwndOwner = ct.windll.user32.GetForegroundWindow()
+    ofn.lpstrFilter = filter_str
+    ofn.lpstrFile = ct.cast(buf, w.LPWSTR)
+    ofn.nMaxFile = ct.sizeof(buf) // ct.sizeof(w.WCHAR)
+    ofn.lpstrTitle = title
+    if start_dir: ofn.lpstrInitialDir = start_dir
+    ofn.Flags = 0x80000 | 0x2 | 0x4
+    ofn.lpstrDefExt = "mp4"
+
+    try:
+        ok = ct.windll.comdlg32.GetSaveFileNameW(ct.byref(ofn))
+        if ok: return buf.value or None
+    except Exception:
+        pass
+    return None
+
+
+def _win32_folder_dialog(title="选择文件夹", initial_dir=None):
+    """Windows API 原生文件夹选择对话框。"""
+    import ctypes as ct
+    from ctypes import wintypes as w
+
+    start_dir = _resolve_initial_dir(initial_dir) if initial_dir else None
+
+    CB = ct.WINFUNCTYPE(ct.c_int, w.HWND, w.UINT, w.LPARAM, w.LPARAM)
+
+    @CB
+    def _cb(hwnd, msg, lp, data):
+        if msg == 1 and start_dir:
+            ct.windll.user32.SendMessageW(hwnd, 0x467, 1, lp)
+        return 0
+
+    class BI(ct.Structure):
+        _fields_ = [
+            ("hwndOwner", w.HWND), ("pidlRoot", w.LPVOID),
+            ("pszDisplayName", w.LPWSTR), ("lpszTitle", w.LPCWSTR),
+            ("ulFlags", w.UINT), ("lpfn", CB), ("lParam", w.LPARAM), ("iImage", ct.c_int),
+        ]
+
+    dbuf = ct.create_unicode_buffer(260)
+    bi = BI()
+    bi.hwndOwner = ct.windll.user32.GetForegroundWindow()
+    bi.pszDisplayName = ct.cast(dbuf, w.LPWSTR)
+    bi.lpszTitle = title
+    bi.ulFlags = 0x1 | 0x40 | 0x10  # BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE | BIF_EDITBOX
+    if start_dir:
+        bi.lpfn = _cb
+        bi.lParam = ct.addressof(ct.create_unicode_buffer(start_dir))
+
+    try:
+        pidl = ct.windll.shell32.SHBrowseForFolderW(ct.byref(bi))
+        if pidl:
+            pbuf = ct.create_unicode_buffer(260)
+            ct.windll.shell32.SHGetPathFromIDListW(pidl, pbuf)
+            ct.windll.ole32.CoTaskMemFree(pidl)
+            return pbuf.value or None
+    except Exception:
+        pass
+    return None
+
+
+# 统一入口：PowerShell 稳定置顶 + 填路径
+def _native_file_dialog(filter_tuples, title="选择文件", initial_dir=None):
+    start_dir = _resolve_initial_dir(initial_dir) if initial_dir else None
+    filter_str = "|".join(f"{n}|{e}" for n, e in filter_tuples)
+    return _ps_file_dialog_fast(filter_str, title, start_dir)
+
+def _native_save_dialog(title="保存文件", initial_dir=None):
+    start_dir = _resolve_initial_dir(initial_dir) if initial_dir else None
+    return _ps_save_dialog_fast(title, start_dir)
+
+def _native_folder_dialog(title="选择文件夹", initial_dir=None):
+    start_dir = _resolve_initial_dir(initial_dir) if initial_dir else None
+    return _ps_folder_dialog_fast(title, start_dir)
+
+
+def _multi_file_dialog(title="选择文件"):
+    """多文件选择对话框。"""
+    return _win32_file_dialog(
+        [("字体文件", "*.ttf;*.otf;*.ttc;*.woff;*.woff2"), ("所有文件", "*.*")],
+        title, multi=True
+    ) or []
+
 
 
 @app.route("/api/browse-file", methods=["POST"])
@@ -870,11 +1537,77 @@ def browse_folder():
 
 # ---------- 启动 ----------
 
+# ---------- Google Ads API ----------
+
+# Google Ads 凭据（在页面中填写，或设置环境变量 GOOGLE_ADS_*）
+_GOOGLE_ADS_CONFIG = {
+    "client_id": os.environ.get("GOOGLE_ADS_CLIENT_ID", ""),
+    "client_secret": os.environ.get("GOOGLE_ADS_CLIENT_SECRET", ""),
+    "refresh_token": os.environ.get("GOOGLE_ADS_REFRESH_TOKEN", ""),
+    "developer_token": os.environ.get("GOOGLE_ADS_DEVELOPER_TOKEN", ""),
+    "manager_id": os.environ.get("GOOGLE_ADS_MANAGER_ID", ""),
+}
+
+
+@app.route("/api/google-ads/accounts", methods=["POST"])
+def google_ads_accounts():
+    """获取可访问的子账户列表。"""
+    try:
+        from google_ads_service import list_accounts, GoogleAdsServiceError  # noqa: F811
+    except ImportError:
+        return jsonify({"success": False, "error": "Google Ads 功能仅在开发模式可用"}), 500
+    data = request.get_json(silent=True) or {}
+    cfg = {**_GOOGLE_ADS_CONFIG, **data}
+    try:
+        accounts = list_accounts(
+            cfg["client_id"], cfg["client_secret"], cfg["refresh_token"],
+            cfg["developer_token"], cfg["manager_id"],
+        )
+        return jsonify({"success": True, "accounts": accounts})
+    except GoogleAdsServiceError as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"success": False, "error": f"未知错误: {e}"}), 500
+
+
+@app.route("/api/google-ads/report", methods=["POST"])
+def google_ads_report():
+    """拉取广告系列报告。"""
+    try:
+        from google_ads_service import fetch_campaign_report, GoogleAdsServiceError  # noqa: F811
+    except ImportError:
+        return jsonify({"success": False, "error": "Google Ads 功能仅在开发模式可用"}), 500
+    data = request.get_json(silent=True) or {}
+    cfg = {**_GOOGLE_ADS_CONFIG, **data}
+    account_id = data.get("account_id", "").strip()
+    start_date = data.get("start_date", "").strip()
+    end_date = data.get("end_date", "").strip()
+    if not account_id:
+        return jsonify({"success": False, "error": "请选择账号"}), 400
+    if not start_date or not end_date:
+        return jsonify({"success": False, "error": "请选择日期范围"}), 400
+    try:
+        results = fetch_campaign_report(
+            cfg["client_id"], cfg["client_secret"], cfg["refresh_token"],
+            cfg["developer_token"], cfg["manager_id"],
+            account_id, start_date, end_date,
+        )
+        return jsonify({"success": True, "rows": results, "count": len(results)})
+    except GoogleAdsServiceError as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"success": False, "error": f"未知错误: {e}"}), 500
+
+
+# ---------- 启动 ----------
+
 if __name__ == "__main__":
     host = "0.0.0.0"
     port = 5000
     print(f"服务已启动: http://{host}:{port}")
     print("在浏览器中打开上方地址即可使用。")
     # 自动打开浏览器
-    webbrowser.open(f"http://127.0.0.1:{port}")
+    # webbrowser.open(f"http://127.0.0.1:{port}")  # 调试时关闭自动打开
     app.run(host=host, port=port, debug=False, threaded=True)
+
+
