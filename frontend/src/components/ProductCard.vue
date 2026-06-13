@@ -12,9 +12,9 @@
             👤 {{ product.related_account_count }} 账户
           </span>
           <template v-for="(cnt, key) in pkgCounts" :key="key">
-            <el-tag v-if="cnt > 0" size="small" :type="key === '' ? 'success' : key === 'rejected' ? 'warning' : key === 'paused' ? 'danger' : 'info'"
+            <el-tag v-if="cnt > 0" size="small" :type="key === 'normal' ? 'success' : key === 'rejected' ? 'warning' : key === 'paused' ? 'danger' : 'info'"
               style="cursor:pointer;" @click.stop="filterStatus = filterStatus === key ? 'all' : key">
-              {{ cnt }} {{ key === '' ? '正常' : key === 'rejected' ? '拒登' : key === 'paused' ? '暂停' : '掉包' }}
+              {{ cnt }} {{ key === 'normal' ? '正常' : key === 'rejected' ? '拒登' : key === 'paused' ? '暂停' : '掉包' }}
             </el-tag>
           </template>
         </div>
@@ -50,7 +50,7 @@
         </div>
         <div style="display:flex;gap:4px;">
           <el-select :model-value="normalizeStatus(pkg.status)" @change="v => setPkgStatus(pkg.id, v)" size="small" style="width:80px;">
-            <el-option label="正常" value="" />
+            <el-option label="正常" value="normal" />
             <el-option label="暂停" value="paused" />
             <el-option label="掉包" value="dropped" />
             <el-option label="拒登" value="rejected" />
@@ -88,14 +88,14 @@ const packages = computed(() => {
 })
 
 const pkgCounts = computed(() => {
-  const c = { '': 0, rejected: 0, paused: 0, dropped: 0 }
-  packages.value.forEach(p => { c[p.status || ''] = (c[p.status || ''] || 0) + 1 })
+  const c = { normal: 0, rejected: 0, paused: 0, dropped: 0 }
+  packages.value.forEach(p => { const s = normalizeStatus(p.status); c[s] = (c[s] || 0) + 1 })
   return c
 })
 
 const filteredPackages = computed(() => {
   if (filterStatus.value === 'all') return packages.value
-  return packages.value.filter(p => (p.status || '') === filterStatus.value)
+  return packages.value.filter(p => normalizeStatus(p.status) === filterStatus.value)
 })
 
 function copy(text) {
@@ -106,12 +106,14 @@ function copy(text) {
 }
 
 function normalizeStatus(s) {
-  if (s === '0' || s === 0 || !s) return ''
+  // 映射数据库值 → 展示值：空/0/null → 'normal'
+  if (s === '0' || s === 0 || !s) return 'normal'
   return s
 }
 
 async function setPkgStatus(pkgId, status) {
-  await store.updatePackage(pkgId, { status })
+  // 映射展示值 → 数据库值：'normal' → ''
+  await store.updatePackage(pkgId, { status: status === 'normal' ? '' : status })
   emit('refresh')
 }
 
