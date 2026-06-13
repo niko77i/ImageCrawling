@@ -1,9 +1,9 @@
 <template>
-  <div class="app-shell">
+  <div style="display:flex;min-height:100vh;">
     <AppSidebar />
-    <main class="app-main">
+    <div style="flex:1;padding:24px;overflow-y:auto;background:#f5f7fa;">
       <router-view />
-    </main>
+    </div>
   </div>
 </template>
 
