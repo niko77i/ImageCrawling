@@ -264,20 +264,30 @@ async function loadHistory() {
 
 // 文件浏览
 async function browseFolder() {
-  const res = await browseApi.folder({})
-  if (res.path) videoDir.value = res.path
+  try {
+    const initial_dir = videoDir.value || null
+    const res = await browseApi.folder({ initial_dir })
+    if (res.path) videoDir.value = res.path
+  } catch(e) { ElMessage.error('选择文件夹失败: ' + e.message) }
 }
 async function browseBgImage() {
-  const res = await browseApi.file({ type: 'image' })
-  if (res.path) bgImage.value = res.path
+  try {
+    const res = await browseApi.file({ type: 'image', initial_dir: bgImage.value ? bgImage.value.substring(0, Math.max(bgImage.value.lastIndexOf('/'), bgImage.value.lastIndexOf('\\'))) : null })
+    if (res.path) bgImage.value = res.path
+  } catch(e) { ElMessage.error('选择文件失败: ' + e.message) }
 }
 async function browseMusic() {
-  const res = await browseApi.file({ type: 'audio' })
-  if (res.path) musicPath.value = res.path
+  try {
+    const res = await browseApi.file({ type: 'audio', initial_dir: musicPath.value ? musicPath.value.substring(0, Math.max(musicPath.value.lastIndexOf('/'), musicPath.value.lastIndexOf('\\'))) : null })
+    if (res.path) musicPath.value = res.path
+  } catch(e) { ElMessage.error('选择文件失败: ' + e.message) }
 }
 async function browseSave() {
-  const res = await browseApi.save({})
-  if (res.path) outputPath.value = res.path
+  try {
+    const initial_dir = outputPath.value ? outputPath.value.substring(0, Math.max(outputPath.value.lastIndexOf('/'), outputPath.value.lastIndexOf('\\'))) : null
+    const res = await browseApi.save({ initial_dir })
+    if (res.path) outputPath.value = res.path
+  } catch(e) { ElMessage.error('选择保存路径失败: ' + e.message) }
 }
 
 // 扫描

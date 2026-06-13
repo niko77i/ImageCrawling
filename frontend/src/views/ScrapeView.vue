@@ -41,6 +41,7 @@
 import { ref } from 'vue'
 import { scrapeApi } from '@/api/scrape'
 import { browseApi } from '@/api/browse'
+import { ElMessage } from 'element-plus'
 
 const urls = ref('')
 const saveDir = ref('')
@@ -49,8 +50,11 @@ const scraping = ref(false)
 const results = ref([])
 
 async function browseFolder() {
-  const res = await browseApi.folder({})
-  if (res.path) saveDir.value = res.path
+  try {
+    const initial_dir = saveDir.value ? saveDir.value : null
+    const res = await browseApi.folder({ initial_dir })
+    if (res.path) saveDir.value = res.path
+  } catch(e) { ElMessage.error('选择文件夹失败: ' + e.message) }
 }
 
 function parseUrls(input) {
