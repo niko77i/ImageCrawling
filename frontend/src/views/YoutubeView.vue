@@ -25,33 +25,42 @@
       </div>
 
       <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap;">
-        <el-input v-model="searchText" placeholder="搜索链接或标题..." @input="filterLocal" style="flex:1;min-width:160px;" size="small" clearable />
-        <el-button size="small" @click="toggleSelectAll">全选</el-button>
-        <el-button size="small" @click="invertSelection">反选</el-button>
+        <el-input v-model="searchText" placeholder="搜索链接或标题..." style="flex:1;min-width:160px;" size="small" clearable />
         <span style="font-size:12px;color:#888;">已选 {{ selected.length }} 条</span>
         <el-button size="small" type="primary" @click="copySelectedLinks">复制链接</el-button>
         <el-button size="small" type="danger" @click="deleteSelected">删除选中</el-button>
       </div>
 
-      <el-table :data="filteredVideos" @selection-change="v => selected = v" stripe size="small" max-height="400">
-        <el-table-column type="selection" width="40" />
-        <el-table-column prop="title" label="标题" show-overflow-tooltip />
-        <el-table-column prop="id" label="Video ID" width="120" />
-        <el-table-column prop="region" label="地区" width="80">
-          <template #default="{ row }"><el-tag size="small" type="warning">{{ row.region }}</el-tag></template>
-        </el-table-column>
-        <el-table-column prop="frame_type" label="帧类型" width="80" />
-        <el-table-column prop="effectiveness" label="成效" width="70" />
-        <el-table-column prop="product_name" label="产品" width="80" />
-        <el-table-column prop="imported_at" label="导入时间" width="100" />
-      </el-table>
-
-      <div style="margin-top:8px;">
-        <span v-if="selected.length" style="font-size:12px;color:#0891b2;cursor:pointer;" @click="playSelected">
-          播放选中 ({{ selected[0]?.title }})
-        </span>
-        <iframe v-if="playingId" :src="'https://www.youtube.com/embed/' + playingId"
-          style="width:100%;aspect-ratio:16/9;margin-top:8px;border:0;" allowfullscreen />
+      <div class="yt-main">
+        <div class="yt-list-col">
+          <el-table :data="filteredVideos" @selection-change="v => selected = v" stripe size="small" max-height="500"
+            highlight-current-row @row-click="playVideo" style="cursor:pointer;">
+            <el-table-column type="selection" width="36" />
+            <el-table-column prop="title" label="标题" show-overflow-tooltip>
+              <template #default="{ row }">
+                <div>{{ row.title }}</div>
+                <div style="font-size:10px;color:#888;font-family:monospace;">{{ row.id }}</div>
+              </template>
+            </el-table-column>
+            <el-table-column width="110">
+              <template #default="{ row }">
+                <el-tag size="small" type="warning" v-if="row.region">{{ row.region }}</el-tag>
+                <el-tag size="small" v-if="row.frame_type" style="margin-left:2px;">{{ row.frame_type }}</el-tag>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+        <div class="yt-player-col">
+          <iframe v-if="playingId" :src="'https://www.youtube.com/embed/' + playingId"
+            style="width:100%;aspect-ratio:16/9;border:0;border-radius:8px;" allowfullscreen />
+          <div v-else style="width:100%;aspect-ratio:16/9;background:#f0f2f5;display:flex;align-items:center;justify-content:center;color:#999;border-radius:8px;">
+            点击左侧视频播放
+          </div>
+          <div v-if="playingId" style="margin-top:8px;font-size:12px;color:#666;">
+            {{ playingTitle }}
+            <el-button link size="small" @click="copyLink(playingId)">复制链接</el-button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -94,7 +103,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useYoutubeStore } from '@/stores/youtube'
-import { ElMessageBox } from 'element-plus'
+import { ElMessageBox, ElMessage } from 'element-plus'
 
 const router = useRouter()
 const route = useRoute()
@@ -111,6 +120,7 @@ function switchTab(name) { router.push(`/youtube/${name}`) }
 const searchText = ref('')
 const selected = ref([])
 const playingId = ref('')
+const playingTitle = ref('')
 
 const filteredVideos = computed(() => {
   if (!searchText.value) return store.videos
@@ -125,24 +135,20 @@ onMounted(async () => {
   await loadVideos()
 })
 
-function filterLocal() {} // computed handles it
-
-function toggleSelectAll() {
-  if (selected.value.length === filteredVideos.value.length) {
-    selected.value = []
-  } else {
-    selected.value = [...filteredVideos.value]
-  }
+function playVideo(row) {
+  playingId.value = row.id
+  playingTitle.value = row.title
 }
 
-function invertSelection() {
-  const selIds = new Set(selected.value.map(s => s.id))
-  selected.value = filteredVideos.value.filter(v => !selIds.has(v.id))
+function copyLink(id) {
+  const url = `https://www.youtube.com/watch?v=${id}`
+  navigator.clipboard.writeText(url).then(() => ElMessage.success('已复制 ✓'))
 }
 
 async function copySelectedLinks() {
   const links = selected.value.map(v => `https://www.youtube.com/watch?v=${v.id}`).join('\n')
   await navigator.clipboard.writeText(links)
+  ElMessage.success(`已复制 ${selected.value.length} 个链接 ✓`)
 }
 
 async function deleteSelected() {
@@ -151,8 +157,6 @@ async function deleteSelected() {
   await store.deleteVideos(selected.value.map(v => v.id))
   selected.value = []
 }
-
-function playSelected() { if (selected.value.length) playingId.value = selected.value[0].id }
 
 // Import tab
 const importUrls = ref('')
@@ -199,3 +203,9 @@ async function saveConfig() {
   savingCfg.value = false
 }
 </script>
+
+<style scoped>
+.yt-main { display: flex; gap: 14px; }
+.yt-list-col { width: 340px; flex-shrink: 0; }
+.yt-player-col { flex: 1; min-width: 300px; }
+</style>
