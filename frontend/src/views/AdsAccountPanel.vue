@@ -50,9 +50,13 @@
       </el-table-column>
     </el-table>
 
-    <el-pagination v-if="store.acTotal > store.acPageSize"
-      v-model:current-page="store.acPage" :page-size="store.acPageSize" :total="store.acTotal"
-      layout="prev,pager,next" @current-change="load" style="margin-top:12px;justify-content:center;" />
+    <div v-if="store.acTotal > store.acPageSize" style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:12px;">
+      <el-pagination v-model:current-page="store.acPage" :page-size="store.acPageSize" :total="store.acTotal"
+        layout="prev,pager,next" size="small" @current-change="load" />
+      <el-select v-model="store.acPageSize" @change="load" size="small" style="width:90px;">
+        <el-option v-for="s in [10,20,50,100]" :key="s" :label="s+'条/页'" :value="s" />
+      </el-select>
+    </div>
 
     <AccountModal v-model:visible="acModalVisible" :edit-id="acEditId" @saved="load" />
   </div>

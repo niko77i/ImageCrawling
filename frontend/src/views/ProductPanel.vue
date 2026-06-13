@@ -32,9 +32,13 @@
     <el-empty v-if="!store.products.length" description="暂无产品" />
 
     <!-- 分页 -->
-    <el-pagination v-if="store.total > store.pageSize"
-      v-model:current-page="store.page" :page-size="store.pageSize" :total="store.total"
-      layout="prev,pager,next" @current-change="load" style="margin-top:12px;justify-content:center;" />
+    <div v-if="store.total > store.pageSize" style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:12px;">
+      <el-pagination v-model:current-page="store.page" :page-size="store.pageSize" :total="store.total"
+        layout="prev,pager,next" size="small" @current-change="load" />
+      <el-select v-model="store.pageSize" @change="load" size="small" style="width:90px;">
+        <el-option v-for="s in [5,10,20,50]" :key="s" :label="s+'条/页'" :value="s" />
+      </el-select>
+    </div>
 
     <!-- 弹窗 -->
     <ProductModal v-model:visible="pmVisible" :edit-id="pmEditId" :mcc-options="mccOptions" @saved="load" />

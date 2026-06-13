@@ -35,9 +35,13 @@
       </el-table-column>
     </el-table>
 
-    <el-pagination v-if="store.mccTotal > store.mccPageSize"
-      v-model:current-page="store.mccPage" :page-size="store.mccPageSize" :total="store.mccTotal"
-      layout="prev,pager,next" @current-change="load" style="margin-top:12px;justify-content:center;" />
+    <div v-if="store.mccTotal > store.mccPageSize" style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:12px;">
+      <el-pagination v-model:current-page="store.mccPage" :page-size="store.mccPageSize" :total="store.mccTotal"
+        layout="prev,pager,next" size="small" @current-change="load" />
+      <el-select v-model="store.mccPageSize" @change="load" size="small" style="width:90px;">
+        <el-option v-for="s in [10,20,50]" :key="s" :label="s+'条/页'" :value="s" />
+      </el-select>
+    </div>
 
     <MccModal v-model:visible="modalVisible" :edit-id="editId" @saved="load" />
     <MccDetailModal v-model:visible="detailVisible" :mcc-id="detailId" />

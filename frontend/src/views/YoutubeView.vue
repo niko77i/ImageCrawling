@@ -33,7 +33,7 @@
 
       <div class="yt-main">
         <div class="yt-list-col">
-          <el-table :data="filteredVideos" @selection-change="v => selected = v" stripe size="small" max-height="500"
+          <el-table :data="pagedVideos" @selection-change="v => selected = v" stripe size="small" max-height="500"
             highlight-current-row @row-click="playVideo" style="cursor:pointer;">
             <el-table-column type="selection" width="36" />
             <el-table-column prop="title" label="标题" show-overflow-tooltip>
@@ -49,6 +49,14 @@
               </template>
             </el-table-column>
           </el-table>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
+            <el-pagination v-if="filteredVideos.length > ytPageSize"
+              v-model:current-page="ytPage" :page-size="ytPageSize" :total="filteredVideos.length"
+              layout="prev,pager,next" size="small" />
+            <el-select v-model="ytPageSize" size="small" style="width:90px;margin-left:auto;">
+              <el-option v-for="s in [10,20,50,100]" :key="s" :label="s+'条/页'" :value="s" />
+            </el-select>
+          </div>
         </div>
         <div class="yt-player-col">
           <iframe v-if="playingId" :src="'https://www.youtube.com/embed/' + playingId"
@@ -121,11 +129,18 @@ const searchText = ref('')
 const selected = ref([])
 const playingId = ref('')
 const playingTitle = ref('')
+const ytPage = ref(1)
+const ytPageSize = ref(20)
 
 const filteredVideos = computed(() => {
   if (!searchText.value) return store.videos
   const q = searchText.value.toLowerCase()
   return store.videos.filter(v => (v.title || '').toLowerCase().includes(q) || (v.id || '').toLowerCase().includes(q))
+})
+
+const pagedVideos = computed(() => {
+  const start = (ytPage.value - 1) * ytPageSize.value
+  return filteredVideos.value.slice(start, start + ytPageSize.value)
 })
 
 async function loadVideos() { await store.loadVideos() }
