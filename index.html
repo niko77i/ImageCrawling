@@ -556,6 +556,11 @@
                 <!-- ===== 子面板：做表数据 ===== -->
                 <div id="tk-zuobiao" class="tk-subpanel">
                     <p style="color:var(--text-muted);margin-bottom:14px;font-size:13px;">粘贴包含"添加过滤条件"和"Total"的原始竖排数据（系统自动识别含 "US$" 的有效费用行）：</p>
+                    <div style="margin-bottom:10px;">
+                        <label style="font-size:13px;cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:6px;">
+                            <input type="checkbox" id="zbIncludeCampaignId" /> 包含广告系列ID（原数据11列，广告系列ID在第5列，勾选后将自动剔除）
+                        </label>
+                    </div>
                     <textarea id="zbInputData" class="zb-textarea" placeholder="在此粘贴原始数据..."></textarea>
 
                     <div class="zb-btn-row">
@@ -652,11 +657,17 @@
             if (endIdx === -1) throw new Error('未找到"Total"');
             if (startIdx >= endIdx) throw new Error('数据顺序异常');
 
+            var includeCampaignId = document.getElementById('zbIncludeCampaignId').checked;
+            var step = includeCampaignId ? 11 : 10;
+            var costIdx = includeCampaignId ? 5 : 4;
+            var imprIdx = includeCampaignId ? 6 : 5;
+            var clickIdx = includeCampaignId ? 7 : 6;
+
             var validLines = lines.slice(startIdx + 1, endIdx);
             var rows = [];
-            for (var i = 0; i < validLines.length; i += 10) {
-                var row = validLines.slice(i, i + 10);
-                if (row.length === 10 && /^\d{3}-\d{3}-\d{4}$/.test(row[1]) && row[4].indexOf('US$') > -1) {
+            for (var i = 0; i < validLines.length; i += step) {
+                var row = validLines.slice(i, i + step);
+                if (row.length === step && /^\d{3}-\d{3}-\d{4}$/.test(row[1]) && row[costIdx].indexOf('US$') > -1) {
                     rows.push(row);
                 }
             }
@@ -668,9 +679,9 @@
                 camp = lastDash > 0 ? camp.substring(0, lastDash).trim() : camp;
                 return {
                     account: r[0], customerId: r[1], campaign: camp,
-                    cost: parseFloat(r[4].replace(/[^0-9.-]+/g, '')) || 0,
-                    impressions: parseInt(r[5].replace(/[^0-9]/g, '')) || 0,
-                    clicks: parseInt(r[6].replace(/[^0-9]/g, '')) || 0
+                    cost: parseFloat(r[costIdx].replace(/[^0-9.-]+/g, '')) || 0,
+                    impressions: parseInt(r[imprIdx].replace(/[^0-9]/g, '')) || 0,
+                    clicks: parseInt(r[clickIdx].replace(/[^0-9]/g, '')) || 0
                 };
             });
 
