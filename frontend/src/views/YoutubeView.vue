@@ -11,16 +11,16 @@
     <div v-show="activeTab === 'view'">
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">
         <el-select v-model="store.filters.region" @change="loadVideos" placeholder="全部地区" clearable size="small">
-          <el-option v-for="r in store.tags.regions" :key="r" :label="r" :value="r" />
+          <el-option v-for="r in store.tags.regions" :key="r" :label="r + ' (' + (store.counts.region?.[r] || 0) + ')'" :value="r" />
         </el-select>
         <el-select v-model="store.filters.frame_type" @change="loadVideos" placeholder="全部帧类型" clearable size="small">
-          <el-option v-for="f in store.tags.frame_types" :key="f" :label="f" :value="f" />
+          <el-option v-for="f in store.tags.frame_types" :key="f" :label="f + ' (' + (store.counts.frame_type?.[f] || 0) + ')'" :value="f" />
         </el-select>
         <el-select v-model="store.filters.effectiveness" @change="loadVideos" placeholder="全部成效" clearable size="small">
-          <el-option v-for="e in store.tags.effectiveness" :key="e" :label="e" :value="e" />
+          <el-option v-for="e in store.tags.effectiveness" :key="e" :label="e + ' (' + (store.counts.effectiveness?.[e] || 0) + ')'" :value="e" />
         </el-select>
         <el-select v-model="store.filters.product_name" @change="loadVideos" placeholder="全部产品" clearable size="small">
-          <el-option v-for="p in store.tags.product_names" :key="p" :label="p" :value="p" />
+          <el-option v-for="p in store.tags.product_names" :key="p" :label="p + ' (' + (store.counts.product_name?.[p] || 0) + ')'" :value="p" />
         </el-select>
       </div>
 

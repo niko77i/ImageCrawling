@@ -30,7 +30,9 @@
         <el-table-column prop="series_name" label="系列名" />
         <el-table-column prop="package_name" label="包名" />
         <el-table-column label="状态">
-          <template #default="{ row }">{{ row.status || '正常' }}</template>
+          <template #default="{ row }">
+            {{ row.status === 'paused' ? '暂停' : row.status === 'dropped' ? '掉包' : row.status === 'rejected' ? '拒登' : '正常' }}
+          </template>
         </el-table-column>
       </el-table>
     </div>
