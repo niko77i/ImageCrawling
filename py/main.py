@@ -22,13 +22,21 @@ from ai_service import get_provider, AIServiceError
 _FROZEN = getattr(sys, "frozen", False)
 
 if _FROZEN:
-    # 打包后所有静态文件在 sys._MEIPASS 下
-    _FRONTEND_DIR = sys._MEIPASS
+    # 打包后所有静态文件在 sys._MEIPASS 下的 dist/ 目录
+    _dist_dir = os.path.join(sys._MEIPASS, "dist")
+    if os.path.isdir(_dist_dir):
+        _FRONTEND_DIR = _dist_dir
+    else:
+        _FRONTEND_DIR = sys._MEIPASS  # 回退
     # 数据目录固定在 EXE 所在目录（而非临时解压目录）
     _DATA_ROOT = os.path.dirname(sys.executable)
 else:
-    # 开发模式：前端文件在 py/ 的上级目录
-    _FRONTEND_DIR = os.path.dirname(_current_dir)
+    # 开发模式：优先用 frontend/dist/（生产构建），否则回退旧目录
+    _dist_dir = os.path.join(os.path.dirname(_current_dir), "frontend", "dist")
+    if os.path.isdir(_dist_dir):
+        _FRONTEND_DIR = _dist_dir
+    else:
+        _FRONTEND_DIR = os.path.dirname(_current_dir)  # 回退到旧前端文件
     _DATA_ROOT = os.path.dirname(_current_dir)
 
 app = Flask(__name__, static_folder=_FRONTEND_DIR, static_url_path="")
@@ -830,8 +838,42 @@ def _yt_db():
     conn.row_factory = _sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("CREATE TABLE IF NOT EXISTS videos (id TEXT PRIMARY KEY, url TEXT, title TEXT, region TEXT, frame_type TEXT, effectiveness TEXT, product_name TEXT, imported_at TEXT)")
     conn.execute("CREATE TABLE IF NOT EXISTS tags (key TEXT PRIMARY KEY, value TEXT)")
+    # 账户与 MCC 管理
+    conn.execute("""CREATE TABLE IF NOT EXISTS mcc (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        mcc_id TEXT UNIQUE NOT NULL,
+        level TEXT DEFAULT '',
+        parent_mcc_id INTEGER REFERENCES mcc(id),
+        created_at TEXT DEFAULT (datetime('now','localtime')),
+        updated_at TEXT DEFAULT (datetime('now','localtime'))
+    )""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS accounts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        account_id TEXT UNIQUE NOT NULL,
+        mcc_id INTEGER REFERENCES mcc(id),
+        timezone TEXT DEFAULT '',
+        agent TEXT DEFAULT '',
+        status TEXT DEFAULT '存活',
+        acquired_date TEXT DEFAULT (date('now','localtime')),
+        created_at TEXT DEFAULT (datetime('now','localtime')),
+        updated_at TEXT DEFAULT (datetime('now','localtime'))
+    )""")
+    # 产品与包表
+    conn.execute("CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, product_name TEXT, kpi TEXT, region TEXT, status TEXT DEFAULT '', mcc_id INTEGER REFERENCES mcc(id), created_at TEXT)")
+    conn.execute("CREATE TABLE IF NOT EXISTS packages (id INTEGER PRIMARY KEY AUTOINCREMENT, product_id INTEGER, series_name TEXT, package_name TEXT, url TEXT, status TEXT DEFAULT '', created_at TEXT, FOREIGN KEY(product_id) REFERENCES products(id))")
+    # 产品表迁移：补 mcc_id 和兼容 is_paused→status
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(products)").fetchall()]
+    if "mcc_id" not in cols:
+        conn.execute("ALTER TABLE products ADD COLUMN mcc_id INTEGER REFERENCES mcc(id)")
+    for t in ["products", "packages"]:
+        tcols = [r[1] for r in conn.execute(f"PRAGMA table_info({t})").fetchall()]
+        if "is_paused" in tcols and "status" not in tcols:
+            conn.execute(f"ALTER TABLE {t} RENAME COLUMN is_paused TO status")
     for k, v in [("regions", '["巴西","菲律宾","孟加拉","印尼","东南亚通用","通用"]'),
                  ("frame_types", '["融帧","非融帧"]'),
                  ("effectiveness", '["","成效","一般"]'),
@@ -1017,6 +1059,7 @@ def products_list():
     search = request.args.get("search", "").strip()
     region = request.args.get("region", "").strip()
     product_id = request.args.get("product_id", "").strip()
+    mcc_id = request.args.get("mcc_id", "").strip()
     status_filter = request.args.get("status")  # None=不传, ""=正常, "paused"=暂停
     page = int(request.args.get("page", 1) or 1)
     size = int(request.args.get("size", 20) or 20)
@@ -1030,6 +1073,8 @@ def products_list():
         where.append("p.region = ?"); params.append(region)
     if product_id:
         where.append("p.id = ?"); params.append(product_id)
+    if mcc_id:
+        where.append("p.mcc_id = ?"); params.append(mcc_id)
     # 暂停筛选（None=不传不过滤, ""=正常产品, "paused"=暂停产品）
     if status_filter is not None:
         status_filter = status_filter.strip()
@@ -1038,7 +1083,7 @@ def products_list():
         else:
             # 兼容旧数据 INTEGER 0（is_paused 迁移后）和新数据 TEXT ''
             where.append("(p.status IS NULL OR p.status = '' OR p.status = '0' OR p.status = 0)")
-    sql = "SELECT p.* FROM products p"
+    sql = "SELECT p.*, m.name AS mcc_name, m.mcc_id AS mcc_code FROM products p LEFT JOIN mcc m ON p.mcc_id=m.id"
     if where: sql += " WHERE " + " AND ".join(where)
     sql += " ORDER BY p.created_at DESC LIMIT ? OFFSET ?"
     rows = db.execute(sql, params + [size, (page - 1) * size]).fetchall()
@@ -1055,10 +1100,18 @@ def products_list():
             natural_sort_key(p["series_name"] or "")
         ))
         prod["packages"] = [dict(p) for p in pkgs]
+        # 关联账户数：仅统计直属（递归在详情弹窗按需加载）
+        if r["mcc_id"]:
+            prod["related_account_count"] = db.execute(
+                "SELECT COUNT(*) FROM accounts WHERE mcc_id=?", (r["mcc_id"],)
+            ).fetchone()[0]
+        else:
+            prod["related_account_count"] = 0
         products.append(prod)
     regions = [r["region"] for r in db.execute("SELECT DISTINCT region FROM products WHERE region!='' ORDER BY region").fetchall()]
+    mcc_options_for_filter = [dict(r) for r in db.execute("SELECT id, name, mcc_id FROM mcc ORDER BY name").fetchall()]
     db.close()
-    return jsonify({"success": True, "products": products, "total": total, "regions": regions})
+    return jsonify({"success": True, "products": products, "total": total, "regions": regions, "mcc_options": mcc_options_for_filter})
 
 
 @app.route("/api/products/create", methods=["POST"])
@@ -1067,6 +1120,7 @@ def products_create():
     product_name = (data.get("product_name") or "").strip()
     kpi = (data.get("kpi") or "").strip()
     region = (data.get("region") or "").strip()
+    mcc_id = data.get("mcc_id") or None
     packages = data.get("packages") or []
     if not product_name:
         return jsonify({"success": False, "error": "产品名不能为空"}), 400
@@ -1078,8 +1132,11 @@ def products_create():
     existing = db.execute("SELECT id FROM products WHERE product_name=?", (product_name,)).fetchone()
     if existing:
         pid = existing["id"]
+        if mcc_id is not None:
+            db.execute("UPDATE products SET mcc_id=? WHERE id=?", (mcc_id, pid))
     else:
-        db.execute("INSERT INTO products(product_name,kpi,region,created_at) VALUES(?,?,?,?)", (product_name, kpi, region, now))
+        db.execute("INSERT INTO products(product_name,kpi,region,mcc_id,created_at) VALUES(?,?,?,?,?)",
+                   (product_name, kpi, region, mcc_id, now))
         pid = db.execute("SELECT last_insert_rowid()").fetchone()[0]
     for p in packages:
         pkg_name = p.get("package_name","")
@@ -1104,7 +1161,7 @@ def products_update(pid):
     data = request.get_json(silent=True) or {}
     db = _yt_db()
     _init_product_tables(db)
-    for f in ["product_name", "kpi", "region", "status"]:
+    for f in ["product_name", "kpi", "region", "status", "mcc_id"]:
         if f in data:
             db.execute(f"UPDATE products SET {f}=? WHERE id=?", (data[f], pid))
     db.commit(); db.close()
@@ -1119,6 +1176,52 @@ def products_delete(pid):
     db.execute("DELETE FROM products WHERE id=?", (pid,))
     db.commit(); db.close()
     return jsonify({"success": True})
+
+
+@app.route("/api/products/<int:pid>/detail", methods=["GET"])
+def products_detail(pid):
+    db = _yt_db()
+    _init_product_tables(db)
+    prod = db.execute(
+        "SELECT p.*, m.name AS mcc_name, m.mcc_id AS mcc_code FROM products p LEFT JOIN mcc m ON p.mcc_id=m.id WHERE p.id=?", (pid,)
+    ).fetchone()
+    if not prod:
+        db.close()
+        return jsonify({"success": False, "error": "产品不存在"}), 404
+    prod_data = dict(prod)
+    # 包列表
+    pkgs = db.execute("SELECT * FROM packages WHERE product_id=? ORDER BY series_name", (pid,)).fetchall()
+    pkgs = sorted(pkgs, key=lambda p: (
+        0 if (str(p["status"] or "")).strip() in ("", "0") else 1,
+        natural_sort_key(p["series_name"] or "")
+    ))
+    prod_data["packages"] = [dict(p) for p in pkgs]
+    # 通过 MCC 关联的账户
+    if prod["mcc_id"]:
+        related_ids = _mcc_recursive_account_ids(prod["mcc_id"])
+        if related_ids:
+            placeholders = ",".join("?" * len(related_ids))
+            related_accounts = [dict(r) for r in db.execute(
+                f"SELECT id, name, account_id, status FROM accounts WHERE id IN ({placeholders}) ORDER BY name",
+                related_ids
+            ).fetchall()]
+        else:
+            related_accounts = []
+        prod_data["related_accounts"] = related_accounts
+        prod_data["related_account_count"] = len(related_accounts)
+        # 状态统计
+        status_count = {"存活": 0, "死亡": 0, "验证": 0, "限额": 0}
+        for a in related_accounts:
+            s = a.get("status", "存活")
+            if s in status_count:
+                status_count[s] += 1
+        prod_data["status_count"] = status_count
+    else:
+        prod_data["related_accounts"] = []
+        prod_data["related_account_count"] = 0
+        prod_data["status_count"] = {}
+    db.close()
+    return jsonify({"success": True, "product": prod_data})
 
 
 @app.route("/api/products/<int:pid>/packages", methods=["POST"])
@@ -1257,6 +1360,344 @@ def _guess_series(text, link):
 
     # 类型5
     return _extract_pkg_from_url(link)
+
+
+# ---------- 账户管理 API ----------
+
+def _mcc_to_dict(r, db=None):
+    d = dict(r)
+    if db:
+        d["direct_count"] = db.execute(
+            "SELECT COUNT(*) FROM accounts WHERE mcc_id=?", (r["id"],)
+        ).fetchone()[0]
+    else:
+        d["direct_count"] = 0
+    return d
+
+def _mcc_recursive_account_ids(mcc_id):
+    """递归获取某 MCC 及其所有子孙 MCC 下的所有账户 ID 列表。"""
+    db = _yt_db()
+    ids = set()
+    stack = [mcc_id]
+    while stack:
+        cur = stack.pop()
+        # 当前 MCC 下的直属账户
+        for a in db.execute("SELECT id FROM accounts WHERE mcc_id=?", (cur,)).fetchall():
+            ids.add(a["id"])
+        # 子 MCC
+        for m in db.execute("SELECT id FROM mcc WHERE parent_mcc_id=?", (cur,)).fetchall():
+            stack.append(m["id"])
+    return list(ids)
+
+
+@app.route("/api/accounts/list", methods=["GET"])
+def accounts_list():
+    search = request.args.get("search", "").strip()
+    mcc_id = request.args.get("mcc_id", "").strip()
+    status = request.args.get("status", "").strip()
+    agent = request.args.get("agent", "").strip()
+    page = int(request.args.get("page", 1) or 1)
+    size = int(request.args.get("size", 20) or 20)
+    db = _yt_db()
+    where = []; params = []
+    if search:
+        where.append("(a.name LIKE ? OR a.account_id LIKE ?)")
+        params += [f"%{search}%", f"%{search}%"]
+    if mcc_id:
+        where.append("a.mcc_id = ?"); params.append(mcc_id)
+    if status:
+        where.append("a.status = ?"); params.append(status)
+    if agent:
+        where.append("a.agent LIKE ?"); params.append(f"%{agent}%")
+    sql = "SELECT a.*, m.name AS mcc_name, m.mcc_id AS mcc_code FROM accounts a LEFT JOIN mcc m ON a.mcc_id=m.id"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY a.created_at DESC LIMIT ? OFFSET ?"
+    rows = db.execute(sql, params + [size, (page - 1) * size]).fetchall()
+    count_sql = "SELECT COUNT(*) FROM accounts a"
+    if where:
+        count_sql += " WHERE " + " AND ".join(where)
+    total = db.execute(count_sql, params).fetchone()[0]
+    accounts = [dict(r) for r in rows]
+    # 筛选下拉数据
+    mcc_options = [dict(r) for r in db.execute("SELECT id, name, mcc_id FROM mcc ORDER BY name").fetchall()]
+    agents = [r["agent"] for r in db.execute("SELECT DISTINCT agent FROM accounts WHERE agent!='' ORDER BY agent").fetchall()]
+    db.close()
+    return jsonify({"success": True, "accounts": accounts, "total": total, "mcc_options": mcc_options, "agents": agents})
+
+
+@app.route("/api/accounts/create", methods=["POST"])
+def accounts_create():
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    account_id = (data.get("account_id") or "").strip()
+    if not name or not account_id:
+        return jsonify({"success": False, "error": "账户名称和ID不能为空"}), 400
+    db = _yt_db()
+    import datetime
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    try:
+        db.execute(
+            "INSERT INTO accounts(name,account_id,mcc_id,timezone,agent,status,acquired_date,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
+            (name, account_id,
+             data.get("mcc_id") or None,
+             (data.get("timezone") or "").strip(),
+             (data.get("agent") or "").strip(),
+             (data.get("status") or "存活").strip(),
+             (data.get("acquired_date") or datetime.date.today().isoformat()),
+             now, now))
+        db.commit()
+        new_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        db.close()
+        return jsonify({"success": True, "id": new_id})
+    except _sqlite3.IntegrityError:
+        db.close()
+        return jsonify({"success": False, "error": f"账户 ID '{account_id}' 已存在"}), 409
+
+
+@app.route("/api/accounts/<int:aid>", methods=["PUT"])
+def accounts_update(aid):
+    data = request.get_json(silent=True) or {}
+    db = _yt_db()
+    for f in ["name", "mcc_id", "timezone", "agent", "status", "acquired_date"]:
+        if f in data:
+            db.execute(f"UPDATE accounts SET {f}=?, updated_at=datetime('now','localtime') WHERE id=?",
+                       (data[f], aid))
+    db.commit(); db.close()
+    return jsonify({"success": True})
+
+
+@app.route("/api/accounts/<int:aid>", methods=["DELETE"])
+def accounts_delete(aid):
+    db = _yt_db()
+    db.execute("DELETE FROM accounts WHERE id=?", (aid,))
+    db.commit(); db.close()
+    return jsonify({"success": True})
+
+
+@app.route("/api/accounts/batch-delete", methods=["POST"])
+def accounts_batch_delete():
+    data = request.get_json(silent=True) or {}
+    ids = data.get("ids") or []
+    if not ids:
+        return jsonify({"success": False, "error": "未选择账户"}), 400
+    db = _yt_db()
+    for aid in ids:
+        db.execute("DELETE FROM accounts WHERE id=?", (aid,))
+    db.commit(); db.close()
+    return jsonify({"success": True, "deleted": len(ids)})
+
+
+@app.route("/api/accounts/batch-update", methods=["POST"])
+def accounts_batch_update():
+    data = request.get_json(silent=True) or {}
+    ids = data.get("ids") or []
+    field = data.get("field", "").strip()
+    value = data.get("value")
+    if not ids or not field:
+        return jsonify({"success": False, "error": "缺少参数"}), 400
+    allowed = ["status", "agent", "mcc_id", "timezone"]
+    if field not in allowed:
+        return jsonify({"success": False, "error": f"不允许修改字段: {field}"}), 400
+    db = _yt_db()
+    for aid in ids:
+        db.execute(f"UPDATE accounts SET {field}=?, updated_at=datetime('now','localtime') WHERE id=?",
+                   (value, aid))
+    db.commit(); db.close()
+    return jsonify({"success": True, "updated": len(ids)})
+
+
+# ---------- MCC API ----------
+
+@app.route("/api/mcc/list", methods=["GET"])
+def mcc_list():
+    search = request.args.get("search", "").strip()
+    level = request.args.get("level", "").strip()
+    parent_filter = request.args.get("parent_filter", "")  # "has_parent", "top", ""
+    page = int(request.args.get("page", 1) or 1)
+    size = int(request.args.get("size", 20) or 20)
+    db = _yt_db()
+    where = []; params = []
+    if search:
+        where.append("(m.name LIKE ? OR m.mcc_id LIKE ?)")
+        params += [f"%{search}%", f"%{search}%"]
+    if level:
+        where.append("m.level LIKE ?"); params.append(f"%{level}%")
+    if parent_filter == "has_parent":
+        where.append("m.parent_mcc_id IS NOT NULL")
+    elif parent_filter == "top":
+        where.append("m.parent_mcc_id IS NULL")
+    sql = "SELECT m.* FROM mcc m"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY m.created_at DESC LIMIT ? OFFSET ?"
+    rows = db.execute(sql, params + [size, (page - 1) * size]).fetchall()
+    count_sql = "SELECT COUNT(*) FROM mcc m"
+    if where:
+        count_sql += " WHERE " + " AND ".join(where)
+    total = db.execute(count_sql, params).fetchone()[0]
+    mcc_list_data = [_mcc_to_dict(r, db) for r in rows]
+    db.close()
+    return jsonify({"success": True, "mcc_list": mcc_list_data, "total": total})
+
+
+@app.route("/api/mcc/options", methods=["GET"])
+def mcc_options():
+    db = _yt_db()
+    rows = db.execute("SELECT id, name, mcc_id FROM mcc ORDER BY name").fetchall()
+    db.close()
+    return jsonify({"success": True, "options": [dict(r) for r in rows]})
+
+
+@app.route("/api/mcc/create", methods=["POST"])
+def mcc_create():
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    mcc_id = (data.get("mcc_id") or "").strip()
+    if not name or not mcc_id:
+        return jsonify({"success": False, "error": "MCC 名称和 ID 不能为空"}), 400
+    db = _yt_db()
+    import datetime
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    try:
+        db.execute(
+            "INSERT INTO mcc(name,mcc_id,level,parent_mcc_id,created_at,updated_at) VALUES(?,?,?,?,?,?)",
+            (name, mcc_id,
+             (data.get("level") or "").strip(),
+             data.get("parent_mcc_id") or None,
+             now, now))
+        db.commit()
+        new_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        db.close()
+        return jsonify({"success": True, "id": new_id})
+    except _sqlite3.IntegrityError:
+        db.close()
+        return jsonify({"success": False, "error": f"MCC ID '{mcc_id}' 已存在"}), 409
+
+
+@app.route("/api/mcc/<int:mid>", methods=["PUT"])
+def mcc_update(mid):
+    data = request.get_json(silent=True) or {}
+    db = _yt_db()
+    for f in ["name", "level", "parent_mcc_id"]:
+        if f in data:
+            db.execute(f"UPDATE mcc SET {f}=?, updated_at=datetime('now','localtime') WHERE id=?",
+                       (data[f], mid))
+    db.commit(); db.close()
+    return jsonify({"success": True})
+
+
+@app.route("/api/mcc/<int:mid>", methods=["DELETE"])
+def mcc_delete(mid):
+    db = _yt_db()
+    # 检查是否有子 MCC
+    children = db.execute("SELECT COUNT(*) FROM mcc WHERE parent_mcc_id=?", (mid,)).fetchone()[0]
+    if children > 0:
+        db.close()
+        return jsonify({"success": False, "error": f"该 MCC 下有 {children} 个子 MCC，请先删除子 MCC"}), 400
+    db.execute("DELETE FROM mcc WHERE id=?", (mid,))
+    db.commit(); db.close()
+    return jsonify({"success": True})
+
+
+@app.route("/api/mcc/batch-delete", methods=["POST"])
+def mcc_batch_delete():
+    data = request.get_json(silent=True) or {}
+    ids = data.get("ids") or []
+    if not ids:
+        return jsonify({"success": False, "error": "未选择 MCC"}), 400
+    db = _yt_db()
+    for mid in ids:
+        children = db.execute("SELECT COUNT(*) FROM mcc WHERE parent_mcc_id=?", (mid,)).fetchone()[0]
+        if children > 0:
+            continue  # 跳过有子节点的
+        db.execute("DELETE FROM mcc WHERE id=?", (mid,))
+    db.commit(); db.close()
+    return jsonify({"success": True, "deleted": len(ids)})
+
+
+@app.route("/api/mcc/<int:mid>/detail", methods=["GET"])
+def mcc_detail(mid):
+    db = _yt_db()
+    mcc = db.execute("SELECT * FROM mcc WHERE id=?", (mid,)).fetchone()
+    if not mcc:
+        db.close()
+        return jsonify({"success": False, "error": "MCC 不存在"}), 404
+    mcc_data = dict(mcc)
+    # 上级 MCC
+    if mcc["parent_mcc_id"]:
+        parent = db.execute("SELECT id, name, mcc_id FROM mcc WHERE id=?", (mcc["parent_mcc_id"],)).fetchone()
+        mcc_data["parent_mcc"] = dict(parent) if parent else None
+    else:
+        mcc_data["parent_mcc"] = None
+    # 直属账户
+    direct_accounts = [dict(r) for r in db.execute(
+        "SELECT id, name, account_id, status FROM accounts WHERE mcc_id=? ORDER BY name", (mid,)
+    ).fetchall()]
+    mcc_data["direct_count"] = len(direct_accounts)
+    mcc_data["direct_accounts"] = direct_accounts
+    # 子 MCC 贡献
+    child_mccs = []
+    child_total = 0
+    for c in db.execute("SELECT id, name, mcc_id FROM mcc WHERE parent_mcc_id=?", (mid,)).fetchall():
+        cdict = dict(c)
+        cdict["account_count"] = db.execute("SELECT COUNT(*) FROM accounts WHERE mcc_id=?", (c["id"],)).fetchone()[0]
+        cdict["account_count"] += sum(
+            db.execute("SELECT COUNT(*) FROM accounts WHERE mcc_id=?", (sc["id"],)).fetchone()[0]
+            for sc in db.execute("SELECT id FROM mcc WHERE parent_mcc_id=?", (c["id"],)).fetchall()
+        )
+        child_total += cdict["account_count"]
+        child_mccs.append(cdict)
+    mcc_data["child_mccs"] = child_mccs
+    mcc_data["total_count"] = mcc_data["direct_count"] + child_total
+    # 关联产品（确保 products 表存在）
+    _init_product_tables(db)
+    mcc_data["products"] = [dict(r) for r in db.execute(
+        "SELECT id, product_name FROM products WHERE mcc_id=? ORDER BY product_name", (mid,)
+    ).fetchall()]
+    db.close()
+    return jsonify({"success": True, "mcc": mcc_data})
+
+
+# ---------- 账户设置 API ----------
+
+@app.route("/api/settings/account", methods=["GET"])
+def account_settings_get():
+    """返回账户管理相关的可配置项（状态、代理、MCC 等级等）。"""
+    db = _yt_db()
+    keys = ["account_statuses", "account_agents", "mcc_levels"]
+    result = {}
+    for k in keys:
+        row = db.execute("SELECT value FROM tags WHERE key=?", (k,)).fetchone()
+        if row:
+            try:
+                result[k] = _json.loads(row["value"])
+            except Exception:
+                result[k] = []
+        else:
+            # 默认值
+            defaults = {
+                "account_statuses": ["存活", "死亡", "验证", "限额"],
+                "account_agents": [],
+                "mcc_levels": [],
+            }
+            result[k] = defaults.get(k, [])
+    db.close()
+    return jsonify({"success": True, "settings": result})
+
+
+@app.route("/api/settings/account", methods=["POST"])
+def account_settings_save():
+    """保存账户管理相关的可配置项。"""
+    data = request.get_json(silent=True) or {}
+    db = _yt_db()
+    for key in ["account_statuses", "account_agents", "mcc_levels"]:
+        if key in data:
+            db.execute("INSERT OR REPLACE INTO tags(key,value) VALUES(?,?)",
+                       (key, _json.dumps(data[key], ensure_ascii=False)))
+    db.commit()
+    db.close()
+    return jsonify({"success": True})
 
 
 # ---------- 文件浏览 API ----------

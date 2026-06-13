@@ -1,6 +1,6 @@
 # 构建产物
 build/
-dist/
+/dist/
 *.spec
 
 # 包缓存
