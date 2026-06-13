@@ -42,7 +42,7 @@ const form = reactive({
 })
 
 onMounted(async () => {
-  if (!store.settings.account_statuses.length) await store.loadSettings()
+  await store.loadSettings()
   form.account_statuses = (store.settings.account_statuses || []).join('\n')
   form.account_agents = (store.settings.account_agents || []).join('\n')
   form.mcc_levels = (store.settings.mcc_levels || []).join('\n')

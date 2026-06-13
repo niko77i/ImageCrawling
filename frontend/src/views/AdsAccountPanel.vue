@@ -74,7 +74,7 @@ const agentOptions = ref([])
 let searchTimer = null
 
 onMounted(async () => {
-  if (!store.settings.account_statuses.length) await store.loadSettings()
+  await store.loadSettings()
   await load()
 })
 

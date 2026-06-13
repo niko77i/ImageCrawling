@@ -59,7 +59,7 @@ const detailVisible = ref(false)
 const detailId = ref(null)
 let searchTimer = null
 
-onMounted(() => load())
+onMounted(async () => { await store.loadSettings(); load() })
 
 function load() { store.loadMccList() }
 function search() {
