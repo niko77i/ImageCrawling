@@ -38,17 +38,18 @@
       </div>
       <div v-for="pkg in filteredPackages" :key="pkg.id"
         style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f5f5f5;font-size:12px;"
-        :style="pkg.status === 'paused' ? 'opacity:0.6;' : pkg.status === 'dropped' ? 'opacity:0.4;text-decoration:line-through;' : ''">
+        :style="normalizeStatus(pkg.status) === 'paused' ? 'opacity:0.6;' : normalizeStatus(pkg.status) === 'dropped' ? 'opacity:0.4;text-decoration:line-through;' : ''">
         <div style="display:flex;align-items:center;gap:6px;flex:1;overflow:hidden;">
           <input type="checkbox" :value="pkg.id" v-model="checkedIds" @click.stop style="width:auto;" />
           <span style="font-weight:600;white-space:nowrap;cursor:pointer;" @click.stop="copy(pkg.series_name)">{{ pkg.series_name || '-' }}</span>
           <span style="color:#ccc;">│</span>
           <span style="font-family:monospace;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" @click.stop="copy(pkg.package_name)">{{ pkg.package_name }}</span>
           <span style="color:#ccc;" v-if="pkg.url">│</span>
-          <a v-if="pkg.url" :href="pkg.url" target="_blank" style="font-size:11px;" @click.stop>🔗</a>
+          <span v-if="pkg.url" style="font-size:11px;color:var(--el-color-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;" @click.stop="copy(pkg.url)">{{ pkg.url }}</span>
+          <a v-if="pkg.url" :href="pkg.url" target="_blank" style="font-size:11px;text-decoration:none;flex-shrink:0;" @click.stop>🔗</a>
         </div>
         <div style="display:flex;gap:4px;">
-          <el-select :model-value="pkg.status || ''" @change="v => setPkgStatus(pkg.id, v)" size="small" style="width:80px;">
+          <el-select :model-value="normalizeStatus(pkg.status)" @change="v => setPkgStatus(pkg.id, v)" size="small" style="width:80px;">
             <el-option label="正常" value="" />
             <el-option label="暂停" value="paused" />
             <el-option label="掉包" value="dropped" />
@@ -65,7 +66,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useProductStore } from '@/stores/products'
-import { ElMessageBox } from 'element-plus'
+import { ElMessageBox, ElMessage } from 'element-plus'
 
 const props = defineProps({ product: Object })
 const emit = defineEmits(['edit', 'detail', 'add-pkg', 'del', 'toggle-pause', 'refresh'])
@@ -99,7 +100,14 @@ const filteredPackages = computed(() => {
 
 function copy(text) {
   if (!text) return
-  navigator.clipboard.writeText(text).catch(() => {})
+  navigator.clipboard.writeText(text).then(() => {
+    ElMessage.success('已复制 ✓')
+  }).catch(() => {})
+}
+
+function normalizeStatus(s) {
+  if (s === '0' || s === 0 || !s) return ''
+  return s
 }
 
 async function setPkgStatus(pkgId, status) {
