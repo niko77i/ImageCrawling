@@ -30,7 +30,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   ├── app.js              # 标签页切换 + 图片爬取面板逻辑 + API_BASE=""
 │   ├── video.js            # AI 视频生成面板（任务队列、历史、文件对话框）
 │   ├── youtube.js          # YouTube 视频管理面板（筛选、批量操作、分页）
-│   ├── product.js          # 产品管理面板（产品/包 CRUD、暂停切换）
+│   ├── account.js         # 账户管理面板（产品/包 + 广告账户 + MCC + 设置）
 │   └── audio.js            # 音频替换工具面板
 ├── py/
 │   ├── __init__.py         # 空文件，使 py/ 成为包
@@ -57,13 +57,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 | 面板 ID | 导航名 | JS 模块 | 默认 |
 |---------|--------|---------|------|
-| `panel-youtube` | 📺 视频管理 | `youtube.js` | ✅ 默认激活 |
-| `panel-product` | 📦 产品管理 | `product.js` | |
+| `panel-account` | 🏢 账户管理 | `account.js` | ✅ 默认激活 |
+| `panel-youtube` | 📺 视频管理 | `youtube.js` | |
 | `panel-scrape` | 📥 图片爬取 | `app.js` | |
 | `panel-video` | 🎬 AI 视频生成 | `video.js` | |
 | `panel-toolkit` | 🧰 工具集 | `app.js`（内联） | |
 
-YouTube 面板还有 3 个子标签（视频展示/导入视频/标签配置）。工具集面板有 2 个子标签（做表数据/音频替换）。
+账户管理面板有 4 个子标签（产品管理/广告账户/MCC 管理/设置）。YouTube 面板有 3 个子标签（视频展示/导入视频/标签配置）。工具集面板有 2 个子标签（做表数据/音频替换）。
 
 ## 存储架构
 
@@ -383,10 +383,10 @@ from .scraper import scrape_images
 
 ## 设计文档索引
 
-- [2026-06-04 Google Play 图片爬取](docs/superpowers/specs/2026-06-04-google-play-image-scraper-design.md)
-- [2026-06-04 应用 Logo 与命名](docs/superpowers/specs/2026-06-04-app-logo-and-naming-design.md)
-- [2026-06-05 AI 视频生成](docs/superpowers/specs/2026-06-05-ai-video-generation-design.md)
-- [2026-06-09 SQLite 统一存储](docs/superpowers/specs/2026-06-09-sqlite-unified-storage-design.md)
-- [2026-06-09 YouTube 视频管理](docs/superpowers/specs/2026-06-09-youtube-video-management-design.md)
-- [2026-06-10 产品管理](docs/superpowers/specs/2026-06-10-product-management-design.md)
-- [2026-06-11 Google Ads API](docs/superpowers/specs/2026-06-11-google-ads-api-design.md)
+- [图片爬取](docs/superpowers/specs/image-scraping-design.md)
+- [AI 视频生成](docs/superpowers/specs/ai-video-generation-design.md)
+- [YouTube 视频管理](docs/superpowers/specs/youtube-video-management-design.md)
+- [账户与产品管理](docs/superpowers/specs/account-product-management-design.md)
+- [Google Ads API](docs/superpowers/specs/google-ads-api-design.md)
+- [SQLite 统一存储](docs/superpowers/specs/sqlite-unified-storage-design.md)
+- [Vue 前端重构](docs/superpowers/specs/vue-migration-design.md)
