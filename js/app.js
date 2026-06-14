@@ -8,17 +8,48 @@ var _crawledPackages = [];
 
 function switchTab(tabName) {
     localStorage.setItem("activeTab", tabName);
-    // 更新导航激活态
-    document.querySelectorAll(".nav-item").forEach((el, i) => {
-        el.classList.toggle("active", (tabName === "youtube" && i === 0) || (tabName === "product" && i === 1) || (tabName === "scrape" && i === 2) || (tabName === "video" && i === 3) || (tabName === "toolkit" && i === 4));
+    // 更新导航激活态 + ARIA
+    document.querySelectorAll(".nav-item").forEach(function(el) {
+        var isActive = el.getAttribute("data-tab") === tabName;
+        el.classList.toggle("active", isActive);
+        el.setAttribute("aria-selected", isActive ? "true" : "false");
+        el.setAttribute("tabindex", isActive ? "0" : "-1");
     });
     // 切换面板
     document.getElementById("panel-scrape").classList.toggle("active", tabName === "scrape");
     document.getElementById("panel-video").classList.toggle("active", tabName === "video");
     document.getElementById("panel-toolkit").classList.toggle("active", tabName === "toolkit");
     document.getElementById("panel-youtube").classList.toggle("active", tabName === "youtube");
-    document.getElementById("panel-product").classList.toggle("active", tabName === "product");
-    if (tabName === "product") { try { loadProducts(1); } catch(e) {} }
+    document.getElementById("panel-account").classList.toggle("active", tabName === "account");
+    if (tabName === "account") { try { loadProducts(1); } catch(e) {} }
+}
+
+/** Keyboard navigation for sidebar tabs (Arrow keys) */
+function handleNavKey(e, currentTab) {
+    var tabs = document.querySelectorAll('[role="tablist"] .nav-item');
+    var idx = -1;
+    for (var i = 0; i < tabs.length; i++) {
+        if (tabs[i].getAttribute('data-tab') === currentTab) { idx = i; break; }
+    }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        var next = (idx + 1) % tabs.length;
+        switchTab(tabs[next].getAttribute('data-tab'));
+        tabs[next].focus();
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+        e.preventDefault();
+        var prev = (idx - 1 + tabs.length) % tabs.length;
+        switchTab(tabs[prev].getAttribute('data-tab'));
+        tabs[prev].focus();
+    } else if (e.key === 'Home') {
+        e.preventDefault();
+        switchTab(tabs[0].getAttribute('data-tab'));
+        tabs[0].focus();
+    } else if (e.key === 'End') {
+        e.preventDefault();
+        switchTab(tabs[tabs.length - 1].getAttribute('data-tab'));
+        tabs[tabs.length - 1].focus();
+    }
 }
 
 function switchToolkitTab(name) {
@@ -167,4 +198,5 @@ window.addEventListener("DOMContentLoaded", function() {
     // 兼容旧版本：audio 已移入工具集
     if (saved === "audio") saved = "toolkit";
     if (saved) switchTab(saved);
+    else switchTab("account");  // 默认激活账户管理
 });

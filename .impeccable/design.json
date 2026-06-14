@@ -1,0 +1,259 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-06-14T10:00:00+08:00",
+  "title": "Design System: ImageCrawling 运营工具箱",
+  "extensions": {
+    "colorMeta": {
+      "signal-cyan": {
+        "role": "primary",
+        "displayName": "Signal Cyan",
+        "canonical": "#0891b2",
+        "tonalRamp": [
+          "#02242e", "#033b4a", "#045367", "#066b84",
+          "#0891b2", "#22d3ee", "#67e8f9", "#a5f3fc",
+          "#cffafe", "#ecfeff"
+        ]
+      },
+      "frosted-steel": {
+        "role": "neutral",
+        "displayName": "Frosted Steel",
+        "canonical": "#e8ecf1",
+        "tonalRamp": [
+          "#1a1c1f", "#2d3035", "#454850", "#5e626b",
+          "#7a7f89", "#9a9fa8", "#bcc1c8", "#d4d8de",
+          "#e8ecf1", "#f4f6f8"
+        ]
+      },
+      "glass-surface": {
+        "role": "neutral",
+        "displayName": "Glass Surface",
+        "canonical": "#f7f8fa",
+        "tonalRamp": [
+          "#1a1a1c", "#2d2e30", "#46474a", "#606266",
+          "#7c7e83", "#9b9da2", "#bcbec3", "#d6d8dc",
+          "#f7f8fa", "#fcfcfd"
+        ]
+      },
+      "deep-sea-ink": {
+        "role": "neutral",
+        "displayName": "Deep Sea Ink",
+        "canonical": "#1a1a2e",
+        "tonalRamp": [
+          "#0a0a12", "#0f0f1c", "#141425", "#1a1a2e",
+          "#2a2a44", "#3d3d60", "#555580", "#72729e",
+          "#9696b8", "#bfbfd4"
+        ]
+      },
+      "storm-gray": {
+        "role": "neutral",
+        "displayName": "Storm Gray",
+        "canonical": "#555770",
+        "tonalRamp": [
+          "#0f0f18", "#1c1c2a", "#2d2d40", "#3f3f58",
+          "#555770", "#6e6e8c", "#8c8ca6", "#adadc0",
+          "#cfcfda", "#ededf2"
+        ]
+      },
+      "fog-gray": {
+        "role": "neutral",
+        "displayName": "Fog Gray",
+        "canonical": "#8888a0",
+        "tonalRamp": [
+          "#151520", "#252535", "#383850", "#4e4e6a",
+          "#6a6a88", "#8888a0", "#a8a8ba", "#c6c6d4",
+          "#e0e0e8", "#f4f4f6"
+        ]
+      },
+      "signal-green": {
+        "role": "functional",
+        "displayName": "Signal Green",
+        "canonical": "#059669",
+        "tonalRamp": [
+          "#012518", "#023d28", "#03573a", "#04734e",
+          "#059669", "#10b981", "#34d399", "#6ee7b7",
+          "#a7f3d0", "#d1fae5"
+        ]
+      },
+      "signal-red": {
+        "role": "functional",
+        "displayName": "Signal Red",
+        "canonical": "#dc2626",
+        "tonalRamp": [
+          "#3b0808", "#5c0d0d", "#7f1111", "#a31515",
+          "#c91919", "#dc2626", "#ef4444", "#f87171",
+          "#fca5a5", "#fecaca"
+        ]
+      },
+      "signal-blue": {
+        "role": "functional",
+        "displayName": "Signal Blue",
+        "canonical": "#2563eb",
+        "tonalRamp": [
+          "#091a3b", "#0f2a5c", "#163d7f", "#1d52a3",
+          "#2563eb", "#3b82f6", "#60a5fa", "#93c5fd",
+          "#bfdbfe", "#dbeafe"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "body": { "displayName": "Body", "purpose": "正文和表单内容。15px Inter 400。" },
+      "headline": { "displayName": "Headline", "purpose": "面板主标题。每个面板仅一个 h1。" },
+      "label": { "displayName": "Label", "purpose": "表单标签、按钮文字、侧边栏标题。大写。" },
+      "nav": { "displayName": "Navigation", "purpose": "侧边栏和子标签页文字。" },
+      "mono": { "displayName": "Mono", "purpose": "包名、文件路径、数据数字。Courier New。" }
+    },
+    "shadows": [
+      {
+        "name": "focus-glow",
+        "value": "0 0 0 3px rgba(8,145,178,0.2)",
+        "purpose": "Input focus indicator. Replaces browser default outline."
+      },
+      {
+        "name": "button-hover",
+        "value": "0 4px 24px rgba(8,145,178,0.2)",
+        "purpose": "Primary button hover glow. Cyan aura, not shadow lift."
+      },
+      {
+        "name": "surface-rest",
+        "value": "0 2px 12px rgba(0,0,0,0.04)",
+        "purpose": "Card and panel subtle ambient shadow. Nearly invisible."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-action",
+        "value": "150ms ease",
+        "purpose": "Default easing for interactive state transitions (hover, focus, active)."
+      },
+      {
+        "name": "ease-modal",
+        "value": "200ms ease",
+        "purpose": "Modal enter/exit animation."
+      },
+      {
+        "name": "ease-progress",
+        "value": "width 0.3s",
+        "purpose": "Progress bar fill width transition."
+      }
+    ],
+    "breakpoints": [
+      { "name": "mobile-nav", "value": "900px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Main call-to-action. Solid Signal Cyan, white text, sharp 150ms hover response.",
+      "html": "<button class=\"ds-btn-primary\">开始爬取</button>",
+      "css": ".ds-btn-primary { background: #0891b2; color: #fff; padding: 10px 28px; letter-spacing: 0.04em; text-transform: uppercase; font-family: Inter, system-ui, sans-serif; font-size: 12px; font-weight: 600; border: none; border-radius: 12px; cursor: pointer; transition: background 150ms ease, box-shadow 150ms ease; } .ds-btn-primary:hover { background: #22d3ee; box-shadow: 0 4px 24px rgba(8,145,178,0.2); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(8,145,178,0.2); } .ds-btn-primary:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Outline variant for secondary actions. Transparent with cyan border.",
+      "html": "<button class=\"ds-btn-secondary\">取消</button>",
+      "css": ".ds-btn-secondary { background: transparent; color: #0891b2; padding: 10px 28px; letter-spacing: 0.04em; text-transform: uppercase; font-family: Inter, system-ui, sans-serif; font-size: 12px; font-weight: 600; border: 1.5px solid #0891b2; border-radius: 12px; cursor: pointer; transition: all 150ms ease; } .ds-btn-secondary:hover { background: #0891b2; color: #fff; } .ds-btn-secondary:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(8,145,178,0.2); }"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Destructive actions. Solid Signal Red.",
+      "html": "<button class=\"ds-btn-danger\">删除</button>",
+      "css": ".ds-btn-danger { background: #dc2626; color: #fff; padding: 10px 28px; letter-spacing: 0.04em; text-transform: uppercase; font-family: Inter, system-ui, sans-serif; font-size: 12px; font-weight: 600; border: none; border-radius: 12px; cursor: pointer; transition: background 150ms ease; } .ds-btn-danger:hover { background: #ef4444; } .ds-btn-danger:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(220,38,38,0.2); }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input-default",
+      "description": "Standard text input. Dark subtle background, cyan focus ring.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"输入 Google Play 链接...\" />",
+      "css": ".ds-input { background: rgba(0,0,0,0.03); color: #1a1a2e; padding: 12px 16px; font-family: Inter, system-ui, sans-serif; font-size: 15px; font-weight: 400; border: 1px solid rgba(0,0,0,0.06); border-radius: 10px; outline: none; width: 100%; box-sizing: border-box; transition: border-color 150ms ease, box-shadow 150ms ease; } .ds-input::placeholder { color: #8888a0; } .ds-input:focus { border-color: #0891b2; box-shadow: 0 0 0 3px rgba(8,145,178,0.2); }"
+    },
+    {
+      "name": "Select Dropdown",
+      "kind": "input",
+      "refersTo": "select-default",
+      "description": "Styled select with custom glass surface and cyan focus.",
+      "html": "<select class=\"ds-select\"><option>全部地区</option><option>日本</option><option>韩国</option></select>",
+      "css": ".ds-select { background: rgba(255,255,255,0.82); color: #1a1a2e; padding: 10px 14px; font-family: Inter, system-ui, sans-serif; font-size: 14px; font-weight: 400; border: 1px solid rgba(0,0,0,0.06); border-radius: 10px; outline: none; cursor: pointer; appearance: none; background-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%238888a0' d='M1.41 0L6 4.58 10.59 0 12 1.41l-6 6-6-6z'/%3E%3C/svg%3E\"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px; transition: border-color 150ms ease, box-shadow 150ms ease; } .ds-select:focus { border-color: #0891b2; box-shadow: 0 0 0 3px rgba(8,145,178,0.2); }"
+    },
+    {
+      "name": "Navigation Item (Active)",
+      "kind": "nav",
+      "refersTo": "nav-item-active",
+      "description": "Sidebar navigation item in active state. Cyan tinted background.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-item active\">📥 图片爬取</a><a class=\"ds-nav-item\">📺 视频管理</a></nav>",
+      "css": ".ds-nav { display: flex; flex-direction: column; gap: 4px; } .ds-nav-item { display: block; padding: 10px 14px; font-family: Inter, system-ui, sans-serif; font-size: 13px; font-weight: 500; color: #555770; border-radius: 10px; cursor: pointer; text-decoration: none; transition: all 150ms ease; } .ds-nav-item:hover { background: rgba(0,0,0,0.04); color: #1a1a2e; } .ds-nav-item.active { background: rgba(6,182,212,0.15); color: #0891b2; font-weight: 600; }"
+    },
+    {
+      "name": "Sub Tab",
+      "kind": "nav",
+      "refersTo": "subtab",
+      "description": "Bottom-border sub-tab style for within-panel navigation.",
+      "html": "<nav class=\"ds-subtabs\"><span class=\"ds-subtab active\">视频展示</span><span class=\"ds-subtab\">导入视频</span><span class=\"ds-subtab\">标签配置</span></nav>",
+      "css": ".ds-subtabs { display: flex; gap: 0; border-bottom: 1px solid rgba(0,0,0,0.06); margin-bottom: 20px; } .ds-subtab { display: inline-block; padding: 10px 20px; font-family: 'Courier New', monospace; font-size: 12px; font-weight: 400; color: #8888a0; cursor: pointer; border-bottom: 2px solid transparent; transition: all 150ms ease; margin-bottom: -1px; } .ds-subtab:hover { color: #555770; } .ds-subtab.active { color: #0891b2; border-bottom-color: #0891b2; }"
+    },
+    {
+      "name": "Status Tag",
+      "kind": "chip",
+      "refersTo": "status-tag",
+      "description": "Colored status tags for categorization. Color = category, not decoration.",
+      "html": "<div class=\"ds-tags\"><span class=\"ds-tag ds-tag-region\">日本</span><span class=\"ds-tag ds-tag-frame\">横版</span><span class=\"ds-tag ds-tag-eff\">成效</span><span class=\"ds-tag ds-tag-prod\">产品A</span></div>",
+      "css": ".ds-tags { display: flex; gap: 8px; flex-wrap: wrap; } .ds-tag { display: inline-block; padding: 4px 10px; font-size: 11px; font-weight: 600; border-radius: 6px; white-space: nowrap; } .ds-tag-region { background: rgba(224,123,60,0.12); color: #c06a30; } .ds-tag-frame { background: rgba(59,130,246,0.12); color: #2e6fd4; } .ds-tag-eff { background: rgba(16,185,129,0.12); color: #0d9e6e; } .ds-tag-prod { background: rgba(124,58,237,0.12); color: #6a2fd4; }"
+    },
+    {
+      "name": "Progress Bar",
+      "kind": "custom",
+      "refersTo": "progress-bar",
+      "description": "Thin progress bar. Minimal visual weight.",
+      "html": "<div class=\"ds-progress\"><div class=\"ds-progress-fill\" style=\"width: 67%;\"></div></div>",
+      "css": ".ds-progress { height: 4px; background: #fbfcfc; border-radius: 2px; overflow: hidden; } .ds-progress-fill { height: 100%; background: #0891b2; border-radius: 2px; transition: width 0.3s; }"
+    },
+    {
+      "name": "Product Card",
+      "kind": "card",
+      "refersTo": "card-product",
+      "description": "Product card with left border accent. Hover reveals cyan accent.",
+      "html": "<div class=\"ds-prod-card\"><div class=\"ds-prod-card-header\"><span class=\"ds-prod-card-title\">产品名称</span><span class=\"ds-badge ds-badge-kpi\">KPI 12.5</span></div></div>",
+      "css": ".ds-prod-card { background: #f7f8fa; border: 1px solid rgba(0,0,0,0.06); border-left: 3px solid rgba(0,0,0,0.08); border-radius: 14px; padding: 16px 20px; cursor: pointer; transition: all 150ms ease; } .ds-prod-card:hover { border-color: rgba(0,0,0,0.12); border-left-color: #0891b2; box-shadow: 0 2px 12px rgba(0,0,0,0.04); } .ds-prod-card-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; } .ds-prod-card-title { font-family: 'Courier New', monospace; font-size: 15px; font-weight: 600; color: #1a1a2e; } .ds-badge-kpi { background: rgba(212,133,10,0.1); color: #6b3f00; padding: 3px 10px; font-size: 11px; font-weight: 600; border-radius: 6px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "精密工作台",
+    "overview": "这是一个运营人员的工作台面 — 每样工具有固定位置，操作精准可预期，不需要花哨的装饰语言。界面的存在意义是让重复性运营任务更快完成，而不是展示设计能力。设计哲学：信息先行，装饰后撤。颜色标记状态（进行中/成功/失败），而非装饰。间距服务于内容分组，而非呼吸感。动画仅用于操作反馈（≤150ms），没有\"让页面看起来生动\"的动画。",
+    "keyCharacteristics": [
+      "冷灰蓝底 + 青色单强调色，色彩克制",
+      "扁平表面为主，弹窗保留下沉的毛玻璃模糊作为注意力聚焦信号",
+      "锐利交互反馈，过渡 ≤150ms，hover 即时响应",
+      "功能色（绿/红/蓝）严格用于状态标记，不用于装饰",
+      "等宽字体用于数据（包名、路径、数字），无衬线用于操作界面"
+    ],
+    "rules": [
+      { "name": "The One Accent Rule", "body": "Signal Cyan 在任何屏幕上覆盖率 ≤10%。按钮、链接、导航、焦点环共享同一个青色 — 使用者凭颜色就知道\"这里可以操作\"。", "section": "colors" },
+      { "name": "The Flat-By-Default Rule", "body": "日常面板和卡片使用纯色背景（Glass Surface）。毛玻璃模糊（backdrop-filter）仅保留在模态框和弹窗上，作为注意力聚焦信号。", "section": "colors" },
+      { "name": "The One Font Rule", "body": "全界面仅使用 Inter 一个字体家族。等宽数据展示使用 Courier New。禁止引入第三个字体家族。", "section": "typography" },
+      { "name": "The Focus-Not-Shadow Rule", "body": "阴影仅用于两个目的：聚焦指示（青色光环）和 hover 反馈（同色光晕放大）。阴影不作为层级表达手段 — 色调深浅承担那个角色。", "section": "elevation" }
+    ],
+    "dos": [
+      "用 Signal Cyan 标记所有可操作元素 — 一个颜色，一个含义",
+      "用功能色（绿/红/蓝）仅标记状态，不用作装饰",
+      "保持操作路径 ≤2 步：面板切换 + 面板内操作",
+      "每个异步操作给出 ⏳/✅/❌ 三段式状态反馈",
+      "扁平纯色表面用于日常浏览，毛玻璃仅用于模态框"
+    ],
+    "donts": [
+      "使用传统 ERP 式的密集表格 + 10px 小字体 + 灰色海洋",
+      "卡片套卡片 — 面板就是容器，内部不嵌套 box-shadow 卡片",
+      "使用超过 150ms 的操作动画 — 工具不需要\"呼吸感\"",
+      "引入第三个字体家族 — Inter + Courier New 足够",
+      "灰色文字放彩色背景上",
+      "纯黑色 (#000) 或纯白色 (#fff) — 始终 tint",
+      "在非模态场景使用 backdrop-filter: blur()",
+      "为了\"好看\"增加操作步骤"
+    ]
+  }
+}

@@ -4,18 +4,26 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Google Play 图片爬取工具</title>
+    <meta name="description" content="谷歌广告图片爬取与处理工具 — 多功能运营工具箱">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>🖼️</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
     <!-- ========== 侧边栏 ========== -->
-    <nav class="sidebar">
-        <div class="sidebar-title">🖼️ 卡天皇莫乱来</div>
-        <div class="nav-item active" onclick="switchTab('youtube')">📺 视频管理</div>
-        <div class="nav-item" onclick="switchTab('product')">📦 产品管理</div>
-        <div class="nav-item" onclick="switchTab('scrape')">📥 图片爬取</div>
-        <div class="nav-item" onclick="switchTab('video')">🎬 AI 视频生成</div>
-        <div class="nav-item" onclick="switchTab('toolkit')">🧰 工具集</div>
+    <nav class="sidebar" role="navigation" aria-label="主导航">
+        <div class="sidebar-title" aria-hidden="true">🖼️ 卡天皇莫乱来</div>
+        <div role="tablist" aria-label="功能面板">
+            <button class="nav-item" role="tab" data-tab="youtube" onclick="switchTab('youtube')" onkeydown="handleNavKey(event,'youtube')" tabindex="0" aria-selected="false"><span aria-hidden="true">📺</span> 视频管理</button>
+            <button class="nav-item" role="tab" data-tab="account" onclick="switchTab('account')" onkeydown="handleNavKey(event,'account')" tabindex="-1" aria-selected="false"><span aria-hidden="true">🏢</span> 账户管理</button>
+            <button class="nav-item" role="tab" data-tab="scrape" onclick="switchTab('scrape')" onkeydown="handleNavKey(event,'scrape')" tabindex="-1" aria-selected="false"><span aria-hidden="true">📥</span> 图片爬取</button>
+            <button class="nav-item" role="tab" data-tab="video" onclick="switchTab('video')" onkeydown="handleNavKey(event,'video')" tabindex="-1" aria-selected="false"><span aria-hidden="true">🎬</span> AI 视频生成</button>
+            <button class="nav-item" role="tab" data-tab="toolkit" onclick="switchTab('toolkit')" onkeydown="handleNavKey(event,'toolkit')" tabindex="-1" aria-selected="false"><span aria-hidden="true">🧰</span> 工具集</button>
+        </div>
     </nav>
 
     <!-- ========== 主内容区 ========== -->
@@ -329,7 +337,7 @@
         </div>
 
         <!-- ===== YouTube 视频管理面板 ===== -->
-        <div id="panel-youtube" class="tab-panel active">
+        <div id="panel-youtube" class="tab-panel">
             <div class="panel-inner">
                 <h1>📺 YouTube 视频管理</h1>
                 <p class="subtitle">管理 YouTube 视频链接，按地区/帧类型分类</p>
@@ -504,40 +512,142 @@
             </div>
         </div>
 
-        <!-- ===== 产品管理面板 ===== -->
-        <div id="panel-product" class="tab-panel">
+        <!-- ===== 账户管理面板（产品+账户+MCC） ===== -->
+        <div id="panel-account" class="tab-panel">
             <div class="panel-inner">
-                <h1>📦 产品管理</h1>
-                <p class="subtitle">管理产品、KPI、地区及包链接</p>
-                <div class="prod-toolbar">
-                    <div class="prod-toolbar-actions">
-                        <button onclick="showProductModal()" class="prod-btn-primary">➕ 新增产品</button>
-                        <button onclick="showCopyImportModal()" class="prod-btn-secondary">📋 复制导入</button>
+                <h1>🏢 账户管理</h1>
+                <p class="subtitle">产品、广告账户、MCC 经理账号统一管理</p>
+
+                <!-- 全局共享 datalist（所有弹窗引用，避免 ID 冲突） -->
+                <datalist id="globalAgentList"></datalist>
+                <datalist id="globalMccLevelList"></datalist>
+
+                <!-- 子标签 -->
+                <div class="ac-subtabs">
+                    <div class="ac-subtab active" data-ac="product" onclick="switchAccountTab('product')">📦 产品管理</div>
+                    <div class="ac-subtab" data-ac="accounts" onclick="switchAccountTab('accounts')">👤 广告账户</div>
+                    <div class="ac-subtab" data-ac="mcc" onclick="switchAccountTab('mcc')">🏢 MCC 管理</div>
+                    <div class="ac-subtab" data-ac="settings" onclick="switchAccountTab('settings')">⚙ 设置</div>
+                </div>
+
+                <!-- ===== 子面板：产品管理 ===== -->
+                <div id="ac-product" class="ac-subpanel">
+                    <div class="prod-toolbar">
+                        <div class="prod-toolbar-actions">
+                            <button onclick="showProductModal()" class="prod-btn-primary">➕ 新增产品</button>
+                            <button onclick="showCopyImportModal()" class="prod-btn-secondary">📋 复制导入</button>
+                        </div>
+                        <div class="prod-toolbar-filters">
+                            <select id="prodFilterRegion" onchange="loadProducts(1)" class="prod-filter-select">
+                                <option value="">全部地区</option>
+                            </select>
+                            <select id="prodFilterMcc" onchange="loadProducts(1)" class="prod-filter-select">
+                                <option value="">全部 MCC</option>
+                            </select>
+                            <div class="prod-search-wrap">
+                                <input type="text" id="prodSearch" placeholder="搜索产品或 KPI..." oninput="loadProducts(1)" class="prod-search-input" />
+                                <span class="prod-search-icon">🔍</span>
+                            </div>
+                            <div class="prod-paused-toggle">
+                                <button id="prodToggleNormal" class="prod-toggle-option active" onclick="prodState.pausedMode=false;loadProducts(1);updatePausedToggle()">正常</button>
+                                <button id="prodTogglePaused" class="prod-toggle-option" onclick="prodState.pausedMode=true;loadProducts(1);updatePausedToggle()">已暂停</button>
+                            </div>
+                        </div>
                     </div>
-                    <div class="prod-toolbar-filters">
-                        <select id="prodFilterRegion" onchange="loadProducts(1)" class="prod-filter-select">
-                            <option value="">全部地区</option>
+                    <div id="prodList"></div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
+                        <div id="prodPagination" class="prod-pagination" style="flex:1;"></div>
+                        <select onchange="prodState.pageSize=parseInt(this.value);prodState.page=1;loadProducts(1);" style="width:auto;padding:4px 8px;font-size:11px;margin-left:12px;">
+                            <option value="5">5条/页</option>
+                            <option value="10" selected>10条/页</option>
+                            <option value="20">20条/页</option>
+                            <option value="50">50条/页</option>
                         </select>
-                        <div class="prod-search-wrap">
-                            <input type="text" id="prodSearch" placeholder="搜索产品或 KPI..." oninput="loadProducts(1)" class="prod-search-input" />
-                            <span class="prod-search-icon">🔍</span>
-                        </div>
-                        <div class="prod-paused-toggle">
-                            <button id="prodToggleNormal" class="prod-toggle-option active" onclick="prodState.pausedMode=false;loadProducts(1);updatePausedToggle()">正常</button>
-                            <button id="prodTogglePaused" class="prod-toggle-option" onclick="prodState.pausedMode=true;loadProducts(1);updatePausedToggle()">已暂停</button>
-                        </div>
                     </div>
                 </div>
-                <div id="prodList"></div>
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
-                    <div id="prodPagination" class="prod-pagination" style="flex:1;"></div>
-                    <select onchange="prodState.pageSize=parseInt(this.value);prodState.page=1;loadProducts(1);" style="width:auto;padding:4px 8px;font-size:11px;margin-left:12px;">
-                        <option value="5">5条/页</option>
-                        <option value="10" selected>10条/页</option>
-                        <option value="20">20条/页</option>
-                        <option value="50">50条/页</option>
-                    </select>
+
+                <!-- ===== 子面板：广告账户 ===== -->
+                <div id="ac-accounts" class="ac-subpanel" style="display:none;">
+                    <div class="ac-toolbar">
+                        <button onclick="showAccountModal()" class="prod-btn-primary">➕ 新增账户</button>
+                        <span id="acSelectedBadge" style="color:#888;font-size:11px;margin-left:8px;">已选 0 条</span>
+                        <button onclick="accountsBatchDelete()" class="prod-btn-secondary">🗑 批量删除</button>
+                        <select id="acBatchStatus" onchange="accountsBatchUpdate('status', this.value)" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd;font-size:11px;">
+                            <option value="">批量修改状态...</option>
+                        </select>
+                    </div>
+                    <div class="ac-filter-bar">
+                        <input type="text" id="acSearch" placeholder="🔍 搜索名称/ID..." oninput="loadAccounts(1)" style="flex:1;min-width:140px;padding:6px 10px;border-radius:6px;border:1px solid #ddd;font-size:11px;">
+                        <select id="acFilterStatus" onchange="loadAccounts(1)" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd;font-size:11px;">
+                            <option value="">全部状态</option>
+                        </select>
+                        <select id="acFilterMcc" onchange="loadAccounts(1)" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd;font-size:11px;">
+                            <option value="">全部 MCC</option>
+                        </select>
+                        <select id="acFilterAgent" onchange="loadAccounts(1)" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd;font-size:11px;">
+                            <option value="">全部代理</option>
+                        </select>
+                    </div>
+                    <div id="acList"></div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
+                        <div id="acPagination" style="flex:1;"></div>
+                        <select onchange="acState.pageSize=parseInt(this.value);acState.page=1;loadAccounts(1);" style="width:auto;padding:4px 8px;font-size:11px;margin-left:12px;">
+                            <option value="10">10条/页</option>
+                            <option value="20" selected>20条/页</option>
+                            <option value="50">50条/页</option>
+                            <option value="100">100条/页</option>
+                        </select>
+                    </div>
                 </div>
+
+                <!-- ===== 子面板：设置 ===== -->
+                <div id="ac-settings" class="ac-subpanel" style="display:none;">
+                    <p class="subtitle" style="margin-bottom:16px;">自定义下拉框选项，修改后全局生效</p>
+                    <div class="settings-row">
+                        <div class="form-group">
+                            <label>账户状态选项</label>
+                            <textarea id="cfgAccountStatuses" rows="5" placeholder="每行一个"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>代理名选项</label>
+                            <textarea id="cfgAccountAgents" rows="5" placeholder="每行一个（留空则自由输入）"></textarea>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>MCC 等级选项</label>
+                        <textarea id="cfgMccLevels" rows="3" placeholder="每行一个（留空则自由输入）"></textarea>
+                    </div>
+                    <button onclick="saveAccountSettings()">💾 保存配置</button>
+                    <span id="acCfgMsg" style="font-size:11px;color:var(--accent-green);margin-left:8px;"></span>
+                </div>
+
+                <!-- ===== 子面板：MCC 管理 ===== -->
+                <div id="ac-mcc" class="ac-subpanel" style="display:none;">
+                    <div class="ac-toolbar">
+                        <button onclick="showMccModal()" class="prod-btn-primary">➕ 新增 MCC</button>
+                        <span id="mccSelectedBadge" style="color:#888;font-size:11px;margin-left:8px;">已选 0 条</span>
+                        <button onclick="mccBatchDelete()" class="prod-btn-secondary">🗑 批量删除</button>
+                    </div>
+                    <div class="ac-filter-bar">
+                        <input type="text" id="mccSearch" placeholder="🔍 搜索名称/ID..." oninput="loadMccList(1)" style="flex:1;min-width:140px;padding:6px 10px;border-radius:6px;border:1px solid #ddd;font-size:11px;">
+                        <input type="text" id="mccFilterLevel" placeholder="等级关键词..." oninput="loadMccList(1)" style="width:130px;padding:6px 10px;border-radius:6px;border:1px solid #ddd;font-size:11px;">
+                        <select id="mccFilterParent" onchange="loadMccList(1)" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd;font-size:11px;">
+                            <option value="">全部上级</option>
+                            <option value="has_parent">有上级</option>
+                            <option value="top">顶级节点</option>
+                        </select>
+                    </div>
+                    <div id="mccList"></div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
+                        <div id="mccPagination" style="flex:1;"></div>
+                        <select onchange="mccState.pageSize=parseInt(this.value);mccState.page=1;loadMccList(1);" style="width:auto;padding:4px 8px;font-size:11px;margin-left:12px;">
+                            <option value="10">10条/页</option>
+                            <option value="20" selected>20条/页</option>
+                            <option value="50">50条/页</option>
+                        </select>
+                    </div>
+                </div>
+
             </div>
         </div>
 
@@ -630,7 +740,7 @@
     <script src="js/video.js"></script>
     <script src="js/audio.js"></script>
     <script src="js/youtube.js"></script>
-    <script src="js/product.js"></script>
+    <script src="js/account.js"></script>
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script>
     // ===== 做表工具 JS（zb 命名空间） =====
@@ -842,5 +952,8 @@
         }
     }
     </script>
+<!-- impeccable-live-start -->
+<script src="http://localhost:8400/live.js"></script>
+<!-- impeccable-live-end -->
 </body>
 </html>
