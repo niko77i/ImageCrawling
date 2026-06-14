@@ -23,15 +23,21 @@
     </el-form>
 
     <div v-if="results.length" style="margin-top:20px;">
-      <h3>处理结果</h3>
-      <div v-for="r in results" :key="r.url" style="padding:8px 12px;border-radius:6px;margin-bottom:4px;font-size:12px;background:rgba(0,0,0,0.02);border-left:3px solid;"
+      <h3>📊 处理结果</h3>
+      <div v-if="summary" style="padding:10px 14px;background:#ecfdf5;border-radius:8px;margin-bottom:8px;font-size:13px;font-weight:600;">
+        {{ summary }}
+      </div>
+      <div v-for="r in results" :key="r.url" style="padding:8px 12px;border-radius:6px;margin-bottom:4px;font-size:12px;background:rgba(0,0,0,0.02);border-left:3px solid;display:flex;align-items:center;gap:8px;"
         :style="{ borderColor: r.error ? '#dc2626' : r.image_count ? '#059669' : '#0891b2' }">
         <span v-if="r.loading">⏳</span>
         <span v-else-if="r.error">❌</span>
         <span v-else>✅</span>
-        {{ r.package_name || r.url }}
-        <span v-if="r.image_count"> — {{ r.image_count }} 张</span>
+        <span style="flex:1;">{{ r.package_name || r.url }}
+          <template v-if="r.image_count"> — {{ r.image_count }} 张</template>
+          <template v-if="r.from_cache"> 📂本地</template>
+        </span>
         <span v-if="r.error" style="color:#dc2626;"> — {{ r.error }}</span>
+        <el-button v-if="!r.error && r.saved_path" link size="small" type="primary" @click="bridgeToVideo(r.saved_path)">🎬 生成视频</el-button>
       </div>
     </div>
   </div>
@@ -39,15 +45,18 @@
 
 <script setup>
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { scrapeApi } from '@/api/scrape'
 import { browseApi } from '@/api/browse'
 import { ElMessage } from 'element-plus'
 
+const router = useRouter()
 const urls = ref('')
 const saveDir = ref('')
 const includeAds = ref(true)
 const scraping = ref(false)
 const results = ref([])
+const summary = ref('')
 
 async function browseFolder() {
   try {
@@ -66,17 +75,31 @@ function parseUrls(input) {
 async function startScrape() {
   const links = parseUrls(urls.value)
   if (!links.length) return
-  scraping.value = true
-  results.value = links.map(url => ({ url, loading: true, package_name: '', image_count: 0, error: '' }))
+  scraping.value = true; summary.value = ''
+  results.value = links.map(url => ({ url, loading: true, package_name: '', image_count: 0, error: '', saved_path: '' }))
 
+  let successCount = 0, failCount = 0, totalImages = 0
   for (let i = 0; i < links.length; i++) {
     try {
       const res = await scrapeApi.scrape({ url: links[i], save_dir: saveDir.value, include_ads_images: includeAds.value })
-      results.value[i] = { url: links[i], package_name: res.package_name, image_count: res.image_count, error: '' }
+      results.value[i] = { url: links[i], package_name: res.package_name, image_count: res.image_count, error: '', saved_path: res.saved_path, from_cache: res.from_cache }
+      successCount++; totalImages += (res.image_count || 0) + (res.logo ? 1 : 0)
     } catch (e) {
-      results.value[i] = { url: links[i], package_name: '', image_count: 0, error: e.message }
+      results.value[i] = { url: links[i], package_name: '', image_count: 0, error: e.message, saved_path: '' }
+      failCount++
     }
   }
+  summary.value = `完成！成功 ${successCount} 个，失败 ${failCount} 个，共保存 ${totalImages} 张图片`
   scraping.value = false
+  // 单个成功 → 自动跳视频页
+  if (successCount === 1) {
+    const pkg = results.value.find(r => !r.error && r.saved_path)
+    if (pkg) bridgeToVideo(pkg.saved_path)
+  }
+}
+
+function bridgeToVideo(dirPath) {
+  sessionStorage.setItem('bridgeVideoDir', dirPath)
+  router.push('/video')
 }
 </script>

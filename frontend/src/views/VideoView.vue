@@ -314,9 +314,37 @@ async function scanDir() {
     images.value = res.images || []
     logo.value = res.logo
     toggleSelectAll(true)
+    // 自动填充输出路径：{输入目录上一级}/ai/{包名}.mp4
+    if (!outputPath.value) {
+      const clean = videoDir.value.replace(/[\\/]+$/, '').replace(/\\/g, '/')
+      const parts = clean.split('/')
+      const pkg = parts[parts.length - 1]
+      const parent = parts.slice(0, -1).join('/')
+      let outPath = parent + '/ai/' + pkg + '.mp4'
+      // 检查不覆盖
+      try {
+        const check = await videoApi.nextFilename({ output_path: outPath })
+        if (check.path) outPath = check.path
+      } catch(e) {}
+      outputPath.value = outPath
+    }
   } catch(e) { ElMessage.error(e.message) }
   scanning.value = false
 }
+
+// 接收来自爬取页面的目录跳转
+onMounted(async () => {
+  await store.loadFonts()
+  fonts.value = store.fonts || []
+  await loadHistory()
+  // 检查是否有从爬取页面传来的目录
+  const bridgeDir = sessionStorage.getItem('bridgeVideoDir')
+  if (bridgeDir) {
+    videoDir.value = bridgeDir
+    sessionStorage.removeItem('bridgeVideoDir')
+    await scanDir()
+  }
+})
 
 // 选择图片
 function toggleImg(filename) {
