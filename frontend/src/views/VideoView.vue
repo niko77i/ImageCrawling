@@ -132,7 +132,7 @@
         <!-- 输出路径 -->
         <el-form-item label="输出路径">
           <div style="display:flex;gap:6px;">
-            <el-input v-model="outputPath" placeholder="例如：F:\output\video.mp4" />
+            <el-input v-model="outputPath" placeholder="例如：F:\output\video.mp4" @blur="outputPath = ensureMp4(outputPath)" />
             <el-button @click="browseSave" style="width:44px;">📂</el-button>
           </div>
           <span class="hint">必须包含 .mp4 扩展名，选择保存路径后自动补全</span>
@@ -375,8 +375,15 @@ async function doGenerate(settings) {
   } catch(e) { generating.value = false; ElMessage.error(e.message) }
 }
 
+function ensureMp4(p) {
+  if (!p) return p
+  return p.toLowerCase().endsWith('.mp4') ? p : p + '.mp4'
+}
+
 async function startGenerate() {
+  outputPath.value = ensureMp4(outputPath.value)
   const s = getSettings()
+  s.settings.output_path = outputPath.value
   if (!s.images.length) { ElMessage.warning('请选择图片'); return }
   if (!outputPath.value) { ElMessage.warning('请输入输出路径'); return }
   if (!overwrite.value) {
@@ -389,7 +396,9 @@ async function startGenerate() {
 }
 
 function addToQueue() {
+  outputPath.value = ensureMp4(outputPath.value)
   const s = getSettings()
+  s.settings.output_path = outputPath.value
   if (!s.images.length) { ElMessage.warning('请选择图片'); return }
   const name = (logo.value ? logo.value.filename : (images.value[0]?.filename || ''))
   taskQueue.value.push({ ...s, name })
