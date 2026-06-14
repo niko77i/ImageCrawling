@@ -1,6 +1,6 @@
 <template>
   <el-dialog :model-value="visible" @update:model-value="$emit('update:visible', $event)"
-    title="📋 复制导入" width="600px" @open="init">
+    title="📋 复制导入" width="95vw" top="2vh" @open="init">
     <el-form label-position="top">
       <el-form-item label="产品 / 群名">
         <el-select v-model="form.product_name" filterable allow-create placeholder="选择已有或输入新产品名" style="width:100%;">

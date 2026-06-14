@@ -32,8 +32,15 @@
     </template>
 
     <div v-show="expanded">
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #eee;">
-        <span style="font-size:11px;color:#888;">包含 {{ packages.length }} 个包</span>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #eee;flex-wrap:wrap;gap:6px;">
+        <span style="display:flex;align-items:center;gap:6px;">
+          <el-button size="small" text @click.stop="toggleAll">{{ allChecked ? '☑ 取消全选' : '☑ 全选' }}</el-button>
+          <span style="font-size:11px;color:#888;">包含 {{ packages.length }} 个包</span>
+          <el-select v-if="checkedIds.length" :model-value="''" @change="v => batchStatusChange(v)" size="small" style="width:110px;" placeholder="批量改状态">
+            <el-option label="正常" value="normal" /><el-option label="暂停" value="paused" /><el-option label="掉包" value="dropped" /><el-option label="拒登" value="rejected" />
+          </el-select>
+          <el-button v-if="checkedIds.length" size="small" @click.stop="batchCopyLinks" type="primary">📋 复制链接</el-button>
+        </span>
         <span style="font-size:11px;color:#888;">已选 {{ checkedIds.length }} 个</span>
       </div>
       <div v-for="pkg in filteredPackages" :key="pkg.id"
@@ -98,6 +105,28 @@ const filteredPackages = computed(() => {
   return packages.value.filter(p => normalizeStatus(p.status) === filterStatus.value)
 })
 
+const allChecked = computed(() => {
+  const nonDropped = packages.value.filter(p => normalizeStatus(p.status) !== 'dropped')
+  return nonDropped.length > 0 && nonDropped.every(p => checkedIds.value.includes(p.id))
+})
+function toggleAll() {
+  if (allChecked.value) { checkedIds.value = [] }
+  else { checkedIds.value = packages.value.filter(p => normalizeStatus(p.status) !== 'dropped').map(p => p.id) }
+}
+function batchStatusChange(status) {
+  if (!checkedIds.value.length) return
+  const labels = { normal:'正常',paused:'暂停',dropped:'掉包',rejected:'拒登' }
+  ElMessageBox.confirm(`将选中的 ${checkedIds.value.length} 个包改为「${labels[status]}」？`,'批量改状态',{type:'warning'}).then(async()=>{
+    const dbStatus = status==='normal'?'':status
+    for(const id of checkedIds.value){ await store.updatePackage(id,{status:dbStatus}) }
+    checkedIds.value=[]; emit('refresh')
+  }).catch(()=>{})
+}
+function batchCopyLinks() {
+  const links = packages.value.filter(p=>checkedIds.value.includes(p.id)&&p.url).map(p=>p.url)
+  if(!links.length){ElMessage.warning('选中的包没有链接');return}
+  navigator.clipboard.writeText(links.join('\n')).then(()=>{ElMessage.success(`已复制 ${links.length} 个链接 ✓`)}).catch(()=>{})
+}
 function copy(text) {
   if (!text) return
   navigator.clipboard.writeText(text).then(() => {

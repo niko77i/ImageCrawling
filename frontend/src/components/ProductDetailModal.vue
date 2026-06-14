@@ -20,7 +20,9 @@
         <el-table-column prop="name" label="账户名称" />
         <el-table-column prop="account_id" label="账户 ID" />
         <el-table-column prop="status" label="状态">
-          <template #default="{ row }"><el-tag size="small">{{ row.status }}</el-tag></template>
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.status === '存活' ? 'success' : row.status === '验证' ? 'warning' : row.status === '死亡' ? 'danger' : 'info'">{{ row.status }}</el-tag>
+          </template>
         </el-table-column>
       </el-table>
       <el-empty v-else description="未关联 MCC 或 MCC 下无账户" :image-size="40" />

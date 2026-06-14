@@ -9,7 +9,7 @@
         <!-- 选择目录 -->
         <el-form-item label="📂 选择图片目录">
           <div style="display:flex;gap:8px;">
-            <el-input v-model="videoDir" placeholder="例如：F:\images\google_ads\com.spotify.music" />
+            <el-input v-model="videoDir" placeholder="例如：F:\images\google_ads\com.spotify.music" style="flex:1;min-width:0;" />
             <el-button @click="browseFolder" style="width:44px;">📂</el-button>
             <el-button type="primary" @click="scanDir" :loading="scanning">🔍 扫描</el-button>
           </div>
@@ -89,7 +89,7 @@
 
         <el-form-item label="🖼️ 背景图片（可选）">
           <div style="display:flex;gap:6px;">
-            <el-input v-model="bgImage" placeholder="留空则使用纯色背景" />
+            <el-input v-model="bgImage" placeholder="留空则使用纯色背景" style="flex:1;min-width:0;" />
             <el-button @click="browseBgImage" style="width:44px;">📂</el-button>
           </div>
         </el-form-item>
@@ -125,14 +125,14 @@
           </el-select></el-form-item>
           <el-form-item label="输出分辨率"><el-select v-model="resolution" size="small" style="width:100%;"><el-option label="9:16 竖屏" value="1080:1920" /><el-option label="1:1 方形" value="1080:1080" /></el-select></el-form-item>
           <el-form-item label="背景音乐（可选.mp3）">
-            <div style="display:flex;gap:4px;"><el-input v-model="musicPath" size="small" placeholder="F:\music\bg.mp3" /><el-button @click="browseMusic" size="small" style="width:36px;">📂</el-button></div>
+            <div style="display:flex;gap:4px;"><el-input v-model="musicPath" size="small" placeholder="F:\music\bg.mp3" style="flex:1;min-width:0;" /><el-button @click="browseMusic" size="small" style="width:36px;flex-shrink:0;">📂</el-button></div>
           </el-form-item>
         </div>
 
         <!-- 输出路径 -->
         <el-form-item label="输出路径">
           <div style="display:flex;gap:6px;">
-            <el-input v-model="outputPath" placeholder="例如：F:\output\video.mp4" @blur="outputPath = ensureMp4(outputPath)" />
+            <el-input v-model="outputPath" placeholder="例如：F:\output\video.mp4" @blur="outputPath = ensureMp4(outputPath)" style="flex:1;min-width:0;" />
             <el-button @click="browseSave" style="width:44px;">📂</el-button>
           </div>
           <span class="hint">必须包含 .mp4 扩展名，选择保存路径后自动补全</span>
@@ -174,7 +174,7 @@
       </div>
 
       <!-- 历史侧边栏 -->
-      <div style="width:220px;flex-shrink:0;border:1px solid #eee;border-radius:8px;padding:12px;max-height:calc(100vh - 100px);overflow-y:auto;">
+      <div style="width:220px;flex-shrink:0;border:1px solid #eee;border-radius:8px;padding:12px;max-height:calc(100vh - 100px);overflow-y:auto;position:sticky;top:20px;">
         <h4 style="font-size:12px;margin-bottom:8px;">📋 历史设置</h4>
         <div v-if="!Object.keys(history).length" style="font-size:10px;color:#999;">暂无历史</div>
         <div v-for="(entries, pkg) in history" :key="pkg" style="margin-bottom:8px;">

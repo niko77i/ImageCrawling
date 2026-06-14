@@ -1312,8 +1312,10 @@ def _mcc_to_dict(r, db=None):
         d["direct_count"] = db.execute(
             "SELECT COUNT(*) FROM accounts WHERE mcc_id=?", (r["id"],)
         ).fetchone()[0]
+        d["total_accounts"] = len(_mcc_recursive_account_ids(r["id"]))
     else:
         d["direct_count"] = 0
+        d["total_accounts"] = 0
     return d
 
 def _mcc_recursive_account_ids(mcc_id):
@@ -1330,6 +1332,21 @@ def _mcc_recursive_account_ids(mcc_id):
         for m in db.execute("SELECT id FROM mcc WHERE parent_mcc_id=?", (cur,)).fetchall():
             stack.append(m["id"])
     return list(ids)
+
+
+def _mcc_get_descendant_ids(mid):
+    """递归获取某 MCC 的所有子孙 MCC ID（含自身），用于循环引用检测。"""
+    db = _yt_db()
+    ids = set()
+    stack = [mid]
+    while stack:
+        cur = stack.pop()
+        if cur in ids:
+            continue
+        ids.add(cur)
+        for m in db.execute("SELECT id FROM mcc WHERE parent_mcc_id=?", (cur,)).fetchall():
+            stack.append(m["id"])
+    return ids
 
 
 @app.route("/api/accounts/list", methods=["GET"])
@@ -1354,18 +1371,31 @@ def accounts_list():
     sql = "SELECT a.*, m.name AS mcc_name, m.mcc_id AS mcc_code FROM accounts a LEFT JOIN mcc m ON a.mcc_id=m.id"
     if where:
         sql += " WHERE " + " AND ".join(where)
-    sql += " ORDER BY a.created_at DESC LIMIT ? OFFSET ?"
+    # 排序
+    sort = request.args.get("sort", "mcc_tz")
+    sort_map = {
+        "mcc_tz": "m.name ASC, a.timezone ASC, a.name ASC",
+        "tz": "m.name ASC, a.timezone ASC, a.name ASC",
+        "name": "m.name ASC, a.name ASC",
+        "agent": "m.name ASC, a.agent ASC, a.name ASC",
+        "created": "m.name ASC, a.created_at DESC",
+    }
+    sql += " ORDER BY " + sort_map.get(sort, sort_map["mcc_tz"]) + " LIMIT ? OFFSET ?"
     rows = db.execute(sql, params + [size, (page - 1) * size]).fetchall()
     count_sql = "SELECT COUNT(*) FROM accounts a"
     if where:
         count_sql += " WHERE " + " AND ".join(where)
     total = db.execute(count_sql, params).fetchone()[0]
     accounts = [dict(r) for r in rows]
+    # 各状态的计数
+    status_counts = {}
+    for r in db.execute("SELECT status, COUNT(*) as cnt FROM accounts GROUP BY status").fetchall():
+        s = r["status"] or "存活"; status_counts[s] = status_counts.get(s, 0) + r["cnt"]
     # 筛选下拉数据
     mcc_options = [dict(r) for r in db.execute("SELECT id, name, mcc_id FROM mcc ORDER BY name").fetchall()]
     agents = [r["agent"] for r in db.execute("SELECT DISTINCT agent FROM accounts WHERE agent!='' ORDER BY agent").fetchall()]
     db.close()
-    return jsonify({"success": True, "accounts": accounts, "total": total, "mcc_options": mcc_options, "agents": agents})
+    return jsonify({"success": True, "accounts": accounts, "total": total, "mcc_options": mcc_options, "agents": agents, "status_counts": status_counts})
 
 
 @app.route("/api/accounts/create", methods=["POST"])
@@ -1498,6 +1528,14 @@ def mcc_create():
     mcc_id = (data.get("mcc_id") or "").strip()
     if not name or not mcc_id:
         return jsonify({"success": False, "error": "MCC 名称和 ID 不能为空"}), 400
+    # 验证上级 MCC 存在
+    parent_mcc_id = data.get("parent_mcc_id") or None
+    if parent_mcc_id:
+        db = _yt_db()
+        parent_row = db.execute("SELECT id FROM mcc WHERE id=?", (int(parent_mcc_id),)).fetchone()
+        db.close()
+        if not parent_row:
+            return jsonify({"success": False, "error": "上级 MCC 不存在"}), 400
     db = _yt_db()
     import datetime
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -1506,7 +1544,7 @@ def mcc_create():
             "INSERT INTO mcc(name,mcc_id,level,parent_mcc_id,created_at,updated_at) VALUES(?,?,?,?,?,?)",
             (name, mcc_id,
              (data.get("level") or "").strip(),
-             data.get("parent_mcc_id") or None,
+             parent_mcc_id,
              now, now))
         db.commit()
         new_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -1521,6 +1559,21 @@ def mcc_create():
 def mcc_update(mid):
     data = request.get_json(silent=True) or {}
     db = _yt_db()
+    # 循环引用检测：新 parent_mcc_id 不能是当前 MCC 的子孙
+    if "parent_mcc_id" in data and data["parent_mcc_id"]:
+        new_parent = int(data["parent_mcc_id"])
+        if new_parent == mid:
+            db.close()
+            return jsonify({"success": False, "error": "上级 MCC 不能设为自己"}), 400
+        descendants = _mcc_get_descendant_ids(mid)
+        if new_parent in descendants:
+            db.close()
+            return jsonify({"success": False, "error": "不能设置为下属 MCC，这会造成循环引用"}), 400
+        # 验证父级存在
+        parent_row = db.execute("SELECT id FROM mcc WHERE id=?", (new_parent,)).fetchone()
+        if not parent_row:
+            db.close()
+            return jsonify({"success": False, "error": "上级 MCC 不存在"}), 400
     for f in ["name", "level", "parent_mcc_id"]:
         if f in data:
             db.execute(f"UPDATE mcc SET {f}=?, updated_at=datetime('now','localtime') WHERE id=?",
@@ -1537,6 +1590,11 @@ def mcc_delete(mid):
     if children > 0:
         db.close()
         return jsonify({"success": False, "error": f"该 MCC 下有 {children} 个子 MCC，请先删除子 MCC"}), 400
+    # 检查是否有直接关联的账户
+    acct_count = db.execute("SELECT COUNT(*) FROM accounts WHERE mcc_id=?", (mid,)).fetchone()[0]
+    if acct_count > 0:
+        db.close()
+        return jsonify({"success": False, "error": f"该 MCC 下有 {acct_count} 个直接关联账户，请先解除关联"}), 400
     db.execute("DELETE FROM mcc WHERE id=?", (mid,))
     db.commit(); db.close()
     return jsonify({"success": True})
@@ -1549,13 +1607,21 @@ def mcc_batch_delete():
     if not ids:
         return jsonify({"success": False, "error": "未选择 MCC"}), 400
     db = _yt_db()
+    skipped = []
+    deleted = 0
     for mid in ids:
         children = db.execute("SELECT COUNT(*) FROM mcc WHERE parent_mcc_id=?", (mid,)).fetchone()[0]
         if children > 0:
-            continue  # 跳过有子节点的
+            skipped.append({"id": mid, "reason": f"有 {children} 个子 MCC"})
+            continue
+        acct_count = db.execute("SELECT COUNT(*) FROM accounts WHERE mcc_id=?", (mid,)).fetchone()[0]
+        if acct_count > 0:
+            skipped.append({"id": mid, "reason": f"有 {acct_count} 个关联账户"})
+            continue
         db.execute("DELETE FROM mcc WHERE id=?", (mid,))
+        deleted += 1
     db.commit(); db.close()
-    return jsonify({"success": True, "deleted": len(ids)})
+    return jsonify({"success": True, "deleted": deleted, "skipped": skipped})
 
 
 @app.route("/api/mcc/<int:mid>/detail", methods=["GET"])
@@ -1578,20 +1644,24 @@ def mcc_detail(mid):
     ).fetchall()]
     mcc_data["direct_count"] = len(direct_accounts)
     mcc_data["direct_accounts"] = direct_accounts
-    # 子 MCC 贡献
+    # 子 MCC + 间接账户
     child_mccs = []
-    child_total = 0
+    indirect_accounts = []
     for c in db.execute("SELECT id, name, mcc_id FROM mcc WHERE parent_mcc_id=?", (mid,)).fetchall():
         cdict = dict(c)
-        cdict["account_count"] = db.execute("SELECT COUNT(*) FROM accounts WHERE mcc_id=?", (c["id"],)).fetchone()[0]
-        cdict["account_count"] += sum(
-            db.execute("SELECT COUNT(*) FROM accounts WHERE mcc_id=?", (sc["id"],)).fetchone()[0]
-            for sc in db.execute("SELECT id FROM mcc WHERE parent_mcc_id=?", (c["id"],)).fetchall()
-        )
-        child_total += cdict["account_count"]
+        c_direct = [dict(r) for r in db.execute(
+            "SELECT id, name, account_id, status FROM accounts WHERE mcc_id=? ORDER BY name", (c["id"],)
+        ).fetchall()]
+        for sc in db.execute("SELECT id FROM mcc WHERE parent_mcc_id=?", (c["id"],)).fetchall():
+            c_direct += [dict(r) for r in db.execute(
+                "SELECT id, name, account_id, status FROM accounts WHERE mcc_id=? ORDER BY name", (sc["id"],)
+            ).fetchall()]
+        cdict["account_count"] = len(c_direct)
         child_mccs.append(cdict)
+        indirect_accounts += c_direct
     mcc_data["child_mccs"] = child_mccs
-    mcc_data["total_count"] = mcc_data["direct_count"] + child_total
+    mcc_data["indirect_accounts"] = indirect_accounts
+    mcc_data["total_count"] = mcc_data["direct_count"] + len(indirect_accounts)
     # 关联产品（确保 products 表存在）
 
     mcc_data["products"] = [dict(r) for r in db.execute(

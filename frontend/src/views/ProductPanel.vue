@@ -33,8 +33,8 @@
 
     <!-- 分页 -->
     <div v-if="store.total > store.pageSize" style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:12px;">
-      <el-pagination v-model:current-page="store.page" :page-size="store.pageSize" :total="store.total"
-        layout="prev,pager,next" size="small" @current-change="load" />
+      <el-pagination v-model:current-page="store.page" :page-size="store.pageSize" :total="store.total" background
+        layout="prev,pager,next" size="small" :pager-count="7" @current-change="load" />
       <el-select v-model="store.pageSize" @change="load" size="small" style="width:90px;">
         <el-option v-for="s in [5,10,20,50]" :key="s" :label="s+'条/页'" :value="s" />
       </el-select>

@@ -39,7 +39,7 @@ export const useAccountStore = defineStore('accounts', {
     async createMcc(body) { return mccApi.create(body) },
     async updateMcc(id, body) { return mccApi.update(id, body) },
     async deleteMcc(id) { await mccApi.delete(id); return this.loadMccList() },
-    async batchDeleteMcc(ids) { await mccApi.batchDelete(ids); return this.loadMccList() },
+    async batchDeleteMcc(ids) { const res = await mccApi.batchDelete(ids); await this.loadMccList(); return res },
     async loadMccDetail(id) { return mccApi.detail(id) },
 
     async loadSettings() {

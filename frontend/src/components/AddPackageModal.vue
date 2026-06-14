@@ -1,6 +1,6 @@
 <template>
   <el-dialog :model-value="visible" @update:model-value="$emit('update:visible', $event)"
-    title="➕ 添加包" width="600px" @open="init">
+    title="➕ 添加包" width="800px" top="5vh" @open="init">
     <el-form label-position="top">
       <el-form-item label="系列名前缀（可选）">
         <el-input v-model="form.prefix" placeholder="如 P222-A" />
@@ -15,7 +15,7 @@
 
       <div v-if="parsed.length" style="margin-top:8px;">
         <p>识别 <strong>{{ parsed.length }}</strong> 个包：</p>
-        <el-input v-model="editText" type="textarea" :rows="Math.min(parsed.length, 4)" style="font-size:11px;" />
+        <el-input v-model="editText" type="textarea" :rows="Math.max(6, Math.min(parsed.length, 12))" style="font-size:12px;" />
       </div>
     </el-form>
     <template #footer>
