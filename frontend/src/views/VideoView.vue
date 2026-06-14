@@ -420,6 +420,7 @@ async function autoSaveHistory() {
     const s = getSettings()
     s.videoDir = videoDir.value
     s.name = (logo.value ? logo.value.filename : (images.value[0]?.filename || ''))
+    delete s.images
     await store.saveHistory(s)
     await loadHistory()
   } catch(e) { /* 静默 */ }
@@ -472,6 +473,7 @@ async function saveHistory() {
   const s = getSettings()
   s.videoDir = videoDir.value
   s.name = (logo.value ? logo.value.filename : (images.value[0]?.filename || ''))
+  delete s.images  // 不保存图片列表（数据量大，从目录重新扫描即可）
   await store.saveHistory(s)
   await loadHistory()
   ElMessage.success('已保存')
@@ -498,18 +500,36 @@ function applyHistory(e) {
     if (s.frame_duration) frameDuration.value = s.frame_duration
     if (s.transition) transition.value = s.transition
     if (s.resolution) resolution.value = s.resolution
-    if (s.bg_color) bgColor.value = s.bg_color
+    if (s.bg_color != null) bgColor.value = s.bg_color
     if (s.content_scale) contentScale.value = s.content_scale
-    if (s.music_path) musicPath.value = s.music_path
+    if (s.music_path != null) musicPath.value = s.music_path
     if (s.text_font) textFont.value = s.text_font
-    if (s.text1) text1.value = s.text1
-    if (s.text2) text2.value = s.text2
+    if (s.text1 != null) text1.value = s.text1
+    if (s.text2 != null) text2.value = s.text2
+    // Logo
+    if (s.use_logo != null) useLogo.value = s.use_logo
+    if (s.logo_position) logoPosition.value = s.logo_position
+    if (s.logo_effect) logoEffect.value = s.logo_effect
+    // 背景
+    if (s.bg_image != null) bgImage.value = s.bg_image
+    if (s.dynamic_bg != null) dynamicBg.value = s.dynamic_bg
+    if (s.dynamic_bg_mode) dynamicBgMode.value = s.dynamic_bg_mode
+    // 其他
+    if (s.overwrite != null) overwrite.value = s.overwrite
+    if (s.random_order != null) randomOrder.value = s.random_order
   }
   if (e.ai?.enabled) {
     useAI.value = true
     if (e.ai.service) aiService.value = e.ai.service
     if (e.ai.duration) aiDuration.value = e.ai.duration
+    if (e.ai.api_key) aiApiKey.value = e.ai.api_key
+    if (e.ai.prompt) aiPrompt.value = e.ai.prompt
+  } else if (e.ai && e.ai.enabled === false) {
+    useAI.value = false
   }
+
+  // 如果有目录，自动扫描
+  if (e.videoDir) scanDir()
   ElMessage.success('已应用历史设置')
 }
 
