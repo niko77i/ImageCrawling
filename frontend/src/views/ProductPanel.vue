@@ -11,7 +11,7 @@
         <el-option v-for="m in mccOptions" :key="m.id" :label="m.name + ' (' + m.mcc_id + ')'" :value="m.id" />
       </el-select>
       <el-input v-model="store.filters.search" placeholder="搜索产品或 KPI..." @input="search" style="flex:1;min-width:160px;" clearable />
-      <el-radio-group v-model="store.pausedMode" @change="load" size="small">
+      <el-radio-group v-model="store.pausedMode" @change="load">
         <el-radio-button :value="false">正常</el-radio-button>
         <el-radio-button :value="true">已暂停</el-radio-button>
       </el-radio-group>

@@ -13,7 +13,7 @@
     <!-- 状态按钮 -->
     <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
       <el-button v-for="s in availableStatuses" :key="s" :type="store.acFilters.status === s ? 'primary' : 'default'" size="small" @click="toggleStatus(s)" style="font-weight:600;">{{ s }} {{ statusCounts[s] || 0 }}</el-button>
-      <el-button v-if="store.acFilters.status" size="small" @click="clearStatus" type="info" plain>✕ 清除</el-button>
+      <el-button v-if="store.acFilters.status" size="small" @click="clearStatus" type="info" plain>展示全部</el-button>
     </div>
 
     <div style="display:flex;gap:8px;margin-bottom:12px;">
