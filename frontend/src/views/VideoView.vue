@@ -135,6 +135,7 @@
             <el-input v-model="outputPath" placeholder="例如：F:\output\video.mp4" />
             <el-button @click="browseSave" style="width:44px;">📂</el-button>
           </div>
+          <span class="hint">必须包含 .mp4 扩展名，选择保存路径后自动补全</span>
         </el-form-item>
 
         <!-- 文案浮层 -->
@@ -284,9 +285,18 @@ async function browseMusic() {
 }
 async function browseSave() {
   try {
-    const initial_dir = outputPath.value ? outputPath.value.substring(0, Math.max(outputPath.value.lastIndexOf('/'), outputPath.value.lastIndexOf('\\'))) : null
+    let p = outputPath.value
+    let initial_dir = null
+    if (p) {
+      const idx = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'))
+      if (idx > -1) initial_dir = p.substring(0, idx)
+    }
     const res = await browseApi.save({ initial_dir })
-    if (res.path) outputPath.value = res.path
+    if (res.path) {
+      p = res.path
+      if (!p.toLowerCase().endsWith('.mp4')) p += '.mp4'
+      outputPath.value = p
+    }
   } catch(e) { ElMessage.error('选择保存路径失败: ' + e.message) }
 }
 
