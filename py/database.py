@@ -90,7 +90,62 @@ def _ensure_schema(conn: sqlite3.Connection):
             key TEXT PRIMARY KEY,
             value TEXT
         );
+
+        -- 账户与 MCC 管理
+        CREATE TABLE IF NOT EXISTS mcc (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            mcc_id TEXT UNIQUE NOT NULL,
+            level TEXT DEFAULT '',
+            parent_mcc_id INTEGER REFERENCES mcc(id),
+            created_at TEXT DEFAULT (datetime('now','localtime')),
+            updated_at TEXT DEFAULT (datetime('now','localtime'))
+        );
+
+        CREATE TABLE IF NOT EXISTS accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            account_id TEXT UNIQUE NOT NULL,
+            mcc_id INTEGER REFERENCES mcc(id),
+            timezone TEXT DEFAULT '',
+            agent TEXT DEFAULT '',
+            status TEXT DEFAULT '存活',
+            acquired_date TEXT DEFAULT (date('now','localtime')),
+            created_at TEXT DEFAULT (datetime('now','localtime')),
+            updated_at TEXT DEFAULT (datetime('now','localtime'))
+        );
+
+        -- 产品与包管理
+        CREATE TABLE IF NOT EXISTS products (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_name TEXT,
+            kpi TEXT,
+            region TEXT,
+            status TEXT DEFAULT '',
+            mcc_id INTEGER REFERENCES mcc(id),
+            created_at TEXT DEFAULT (datetime('now','localtime'))
+        );
+
+        CREATE TABLE IF NOT EXISTS packages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_id INTEGER,
+            series_name TEXT,
+            package_name TEXT,
+            url TEXT,
+            status TEXT DEFAULT '',
+            created_at TEXT DEFAULT (datetime('now','localtime')),
+            FOREIGN KEY(product_id) REFERENCES products(id)
+        );
     """)
+
+    # 产品表迁移：补 mcc_id 和兼容 is_paused→status
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(products)").fetchall()]
+    if "mcc_id" not in cols:
+        conn.execute("ALTER TABLE products ADD COLUMN mcc_id INTEGER REFERENCES mcc(id)")
+    for t in ["products", "packages"]:
+        tcols = [r[1] for r in conn.execute(f"PRAGMA table_info({t})").fetchall()]
+        if "is_paused" in tcols and "status" not in tcols:
+            conn.execute(f"ALTER TABLE {t} RENAME COLUMN is_paused TO status")
 
     # 初始化默认标签
     for k, v in [("regions", '["巴西","菲律宾","孟加拉","印尼","东南亚通用","通用"]'),
@@ -200,6 +255,29 @@ def _migrate_youtube_db(conn: sqlite3.Connection, root: str):
             d = dict(r)
             conn.execute("INSERT OR IGNORE INTO tags(key,value) VALUES(?,?)",
                          (d.get("key"), d.get("value")))
+
+        # 迁移 mcc / accounts / products / packages（如果存在）
+        conn.execute("PRAGMA foreign_keys=OFF")
+        for table, cols in [
+            ("mcc", ["id","name","mcc_id","level","parent_mcc_id","created_at","updated_at"]),
+            ("accounts", ["id","name","account_id","mcc_id","timezone","agent","status","acquired_date","created_at","updated_at"]),
+            ("products", ["id","product_name","kpi","region","status","mcc_id","created_at"]),
+            ("packages", ["id","product_id","series_name","package_name","url","status","created_at"]),
+        ]:
+            try:
+                old_rows = yt_conn.execute(f"SELECT * FROM {table}").fetchall()
+            except Exception:
+                continue
+            placeholders = ",".join(["?"] * len(cols))
+            col_str = ",".join(cols)
+            for r in old_rows:
+                d = dict(r)
+                vals = [d.get(c) for c in cols]
+                try:
+                    conn.execute(f"INSERT OR IGNORE INTO {table}({col_str}) VALUES({placeholders})", vals)
+                except Exception:
+                    pass
+        conn.execute("PRAGMA foreign_keys=ON")
 
         yt_conn.close()
         # 备份

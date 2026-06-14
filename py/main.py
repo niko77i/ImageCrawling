@@ -16,6 +16,7 @@ from resizer import process_image, save_logo, ResizeError
 from utils import extract_package_name, natural_sort_key
 from video_processor import VideoTask, VideoError
 from ai_service import get_provider, AIServiceError
+import database
 # google_ads_service 按需加载，不打包进 EXE
 
 # 判断是否为 PyInstaller 打包模式
@@ -829,57 +830,9 @@ import re as _re
 import sqlite3 as _sqlite3
 import json as _json
 
-_YT_DB = os.path.join(_DATA_ROOT, "temp", "youtube.db")
-
-
 def _yt_db():
-    os.makedirs(os.path.dirname(_YT_DB), exist_ok=True)
-    conn = _sqlite3.connect(_YT_DB)
-    conn.row_factory = _sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    conn.execute("CREATE TABLE IF NOT EXISTS videos (id TEXT PRIMARY KEY, url TEXT, title TEXT, region TEXT, frame_type TEXT, effectiveness TEXT, product_name TEXT, imported_at TEXT)")
-    conn.execute("CREATE TABLE IF NOT EXISTS tags (key TEXT PRIMARY KEY, value TEXT)")
-    # 账户与 MCC 管理
-    conn.execute("""CREATE TABLE IF NOT EXISTS mcc (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        mcc_id TEXT UNIQUE NOT NULL,
-        level TEXT DEFAULT '',
-        parent_mcc_id INTEGER REFERENCES mcc(id),
-        created_at TEXT DEFAULT (datetime('now','localtime')),
-        updated_at TEXT DEFAULT (datetime('now','localtime'))
-    )""")
-    conn.execute("""CREATE TABLE IF NOT EXISTS accounts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        account_id TEXT UNIQUE NOT NULL,
-        mcc_id INTEGER REFERENCES mcc(id),
-        timezone TEXT DEFAULT '',
-        agent TEXT DEFAULT '',
-        status TEXT DEFAULT '存活',
-        acquired_date TEXT DEFAULT (date('now','localtime')),
-        created_at TEXT DEFAULT (datetime('now','localtime')),
-        updated_at TEXT DEFAULT (datetime('now','localtime'))
-    )""")
-    # 产品与包表
-    conn.execute("CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, product_name TEXT, kpi TEXT, region TEXT, status TEXT DEFAULT '', mcc_id INTEGER REFERENCES mcc(id), created_at TEXT)")
-    conn.execute("CREATE TABLE IF NOT EXISTS packages (id INTEGER PRIMARY KEY AUTOINCREMENT, product_id INTEGER, series_name TEXT, package_name TEXT, url TEXT, status TEXT DEFAULT '', created_at TEXT, FOREIGN KEY(product_id) REFERENCES products(id))")
-    # 产品表迁移：补 mcc_id 和兼容 is_paused→status
-    cols = [r[1] for r in conn.execute("PRAGMA table_info(products)").fetchall()]
-    if "mcc_id" not in cols:
-        conn.execute("ALTER TABLE products ADD COLUMN mcc_id INTEGER REFERENCES mcc(id)")
-    for t in ["products", "packages"]:
-        tcols = [r[1] for r in conn.execute(f"PRAGMA table_info({t})").fetchall()]
-        if "is_paused" in tcols and "status" not in tcols:
-            conn.execute(f"ALTER TABLE {t} RENAME COLUMN is_paused TO status")
-    for k, v in [("regions", '["巴西","菲律宾","孟加拉","印尼","东南亚通用","通用"]'),
-                 ("frame_types", '["融帧","非融帧"]'),
-                 ("effectiveness", '["","成效","一般"]'),
-                 ("product_names", '["p222","93ok"]')]:
-        conn.execute("INSERT OR IGNORE INTO tags(key,value) VALUES(?,?)", (k, v))
-    return conn
+    """返回统一数据库连接（temp/app.db），由 database.py 管理建表与迁移。"""
+    return database.get_db()
 
 
 def _extract_youtube_id(url: str):
@@ -1043,17 +996,6 @@ def youtube_tags_save():
 
 import re as _re_prod
 
-def _init_product_tables(db):
-    db.execute("CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, product_name TEXT, kpi TEXT, region TEXT, status TEXT DEFAULT '', created_at TEXT)")
-    db.execute("CREATE TABLE IF NOT EXISTS packages (id INTEGER PRIMARY KEY AUTOINCREMENT, product_id INTEGER, series_name TEXT, package_name TEXT, url TEXT, status TEXT DEFAULT '', created_at TEXT, FOREIGN KEY(product_id) REFERENCES products(id))")
-    # 迁移：老库可能只有 is_paused 列，补上 status
-    for table in ["products", "packages"]:
-        cols = [r[1] for r in db.execute(f"PRAGMA table_info({table})").fetchall()]
-        if "is_paused" in cols and "status" not in cols:
-            db.execute(f"ALTER TABLE {table} RENAME COLUMN is_paused TO status")
-    db.commit()
-
-
 @app.route("/api/products/list", methods=["GET"])
 def products_list():
     search = request.args.get("search", "").strip()
@@ -1064,7 +1006,7 @@ def products_list():
     page = int(request.args.get("page", 1) or 1)
     size = int(request.args.get("size", 20) or 20)
     db = _yt_db()
-    _init_product_tables(db)
+
     where = []; params = []
     if search:
         where.append("(p.product_name LIKE ? OR p.kpi LIKE ?)")
@@ -1125,7 +1067,7 @@ def products_create():
     if not product_name:
         return jsonify({"success": False, "error": "产品名不能为空"}), 400
     db = _yt_db()
-    _init_product_tables(db)
+
     import datetime
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     # 已有同名产品则追加包
@@ -1160,7 +1102,7 @@ def products_create():
 def products_update(pid):
     data = request.get_json(silent=True) or {}
     db = _yt_db()
-    _init_product_tables(db)
+
     for f in ["product_name", "kpi", "region", "status", "mcc_id"]:
         if f in data:
             db.execute(f"UPDATE products SET {f}=? WHERE id=?", (data[f], pid))
@@ -1171,7 +1113,7 @@ def products_update(pid):
 @app.route("/api/products/<int:pid>", methods=["DELETE"])
 def products_delete(pid):
     db = _yt_db()
-    _init_product_tables(db)
+
     db.execute("DELETE FROM packages WHERE product_id=?", (pid,))
     db.execute("DELETE FROM products WHERE id=?", (pid,))
     db.commit(); db.close()
@@ -1181,7 +1123,7 @@ def products_delete(pid):
 @app.route("/api/products/<int:pid>/detail", methods=["GET"])
 def products_detail(pid):
     db = _yt_db()
-    _init_product_tables(db)
+
     prod = db.execute(
         "SELECT p.*, m.name AS mcc_name, m.mcc_id AS mcc_code FROM products p LEFT JOIN mcc m ON p.mcc_id=m.id WHERE p.id=?", (pid,)
     ).fetchone()
@@ -1233,7 +1175,7 @@ def products_add_package(pid):
     if not package_name:
         return jsonify({"success": False, "error": "包名不能为空"}), 400
     db = _yt_db()
-    _init_product_tables(db)
+
     import datetime
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     # 同一产品下，包名+链接相同 = 同一个包，只更新系列名
@@ -1255,7 +1197,7 @@ def products_add_package(pid):
 def products_update_package(pkg_id):
     data = request.get_json(silent=True) or {}
     db = _yt_db()
-    _init_product_tables(db)
+
     for f in ["series_name", "package_name", "url", "status"]:
         if f in data:
             db.execute(f"UPDATE packages SET {f}=? WHERE id=?", (data[f], pkg_id))
@@ -1266,7 +1208,7 @@ def products_update_package(pkg_id):
 @app.route("/api/products/packages/<int:pkg_id>", methods=["DELETE"])
 def products_delete_package(pkg_id):
     db = _yt_db()
-    _init_product_tables(db)
+
     db.execute("DELETE FROM packages WHERE id=?", (pkg_id,))
     db.commit(); db.close()
     return jsonify({"success": True})
@@ -1651,7 +1593,7 @@ def mcc_detail(mid):
     mcc_data["child_mccs"] = child_mccs
     mcc_data["total_count"] = mcc_data["direct_count"] + child_total
     # 关联产品（确保 products 表存在）
-    _init_product_tables(db)
+
     mcc_data["products"] = [dict(r) for r in db.execute(
         "SELECT id, product_name FROM products WHERE mcc_id=? ORDER BY product_name", (mid,)
     ).fetchall()]
