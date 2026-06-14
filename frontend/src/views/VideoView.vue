@@ -174,14 +174,19 @@
       </div>
 
       <!-- 历史侧边栏 -->
-      <div style="width:220px;flex-shrink:0;border:1px solid #eee;border-radius:8px;padding:12px;">
+      <div style="width:220px;flex-shrink:0;border:1px solid #eee;border-radius:8px;padding:12px;max-height:calc(100vh - 100px);overflow-y:auto;">
         <h4 style="font-size:12px;margin-bottom:8px;">📋 历史设置</h4>
+        <div v-if="!Object.keys(history).length" style="font-size:10px;color:#999;">暂无历史</div>
         <div v-for="(entries, pkg) in history" :key="pkg" style="margin-bottom:8px;">
-          <strong style="font-size:10px;color:#666;">{{ pkg }}</strong>
-          <div v-for="(e,i) in (Array.isArray(entries) ? entries : [])" :key="i" style="font-size:10px;padding:2px 4px;cursor:pointer;border-radius:3px;"
-            :style="{ background: e._id === activeHistoryId ? '#e6f7ff' : 'transparent' }"
-            @click="applyHistory(e)">
-            {{ e.name || e._saved_at || '-' }}
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <strong style="font-size:10px;color:#666;">{{ pkg }}</strong>
+            <el-button link size="small" type="danger" @click="deleteHistoryPkg(pkg)" title="删除整包">✕</el-button>
+          </div>
+          <div v-for="(e,i) in (Array.isArray(entries) ? entries : [])" :key="i"
+            style="font-size:10px;padding:2px 4px;cursor:pointer;border-radius:3px;display:flex;justify-content:space-between;align-items:center;"
+            :style="{ background: e._id === activeHistoryId ? '#e6f7ff' : 'transparent' }">
+            <span @click="applyHistory(e)" style="flex:1;">{{ e.name || e._saved_at || '-' }}</span>
+            <el-button link size="small" type="danger" @click.stop="deleteHistoryEntry(pkg, i)" style="font-size:9px;">✕</el-button>
           </div>
         </div>
         <el-button size="small" @click="saveHistory" style="width:100%;margin-top:8px;">💾 保存当前设置</el-button>
@@ -369,10 +374,27 @@ async function doGenerate(settings) {
       const p = await store.checkProgress(tid)
       progressPct.value = p.progress || 0
       progressMsg.value = p.message || '处理中...'
-      if (p.status === 'completed') { clearInterval(pollTimer); generating.value = false; progressMsg.value = '✅ 完成: ' + (p.output || ''); ElMessage.success('视频生成完成') }
+      if (p.status === 'completed') {
+        clearInterval(pollTimer); generating.value = false
+        progressMsg.value = '✅ 完成: ' + (p.output || '')
+        ElMessage.success('视频生成完成')
+        // 自动保存设置到历史
+        autoSaveHistory()
+      }
       if (p.status === 'error') { clearInterval(pollTimer); generating.value = false; progressMsg.value = '❌ ' + (p.message || '未知错误'); ElMessage.error(p.message) }
     }, 2000)
   } catch(e) { generating.value = false; ElMessage.error(e.message) }
+}
+
+async function autoSaveHistory() {
+  try {
+    if (!videoDir.value || !images.value.length) return
+    const s = getSettings()
+    s.videoDir = videoDir.value
+    s.name = (logo.value ? logo.value.filename : (images.value[0]?.filename || ''))
+    await store.saveHistory(s)
+    await loadHistory()
+  } catch(e) { /* 静默 */ }
 }
 
 function ensureMp4(p) {
@@ -417,12 +439,26 @@ async function generateAll() {
 
 // 历史
 async function saveHistory() {
+  if (!videoDir.value) { ElMessage.warning('请先选择图片目录'); return }
+  if (!images.value.length) { ElMessage.warning('请先扫描图片'); return }
   const s = getSettings()
   s.videoDir = videoDir.value
   s.name = (logo.value ? logo.value.filename : (images.value[0]?.filename || ''))
   await store.saveHistory(s)
   await loadHistory()
   ElMessage.success('已保存')
+}
+
+async function deleteHistoryEntry(pkg, index) {
+  await store.deleteHistory(pkg, [index])
+  await loadHistory()
+  ElMessage.success('已删除')
+}
+
+async function deleteHistoryPkg(pkg) {
+  await store.deleteHistory(pkg, null)  // null = 删整包
+  await loadHistory()
+  ElMessage.success('已删除整包')
 }
 
 function applyHistory(e) {
