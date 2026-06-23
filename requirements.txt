@@ -5,3 +5,4 @@ beautifulsoup4>=4.12
 Pillow>=10.0
 volcengine-python-sdk>=1.0
 google-ads>=24.0
+deep-translator>=1.11

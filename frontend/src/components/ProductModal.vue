@@ -12,7 +12,7 @@
         <el-input v-model="form.region" />
       </el-form-item>
       <el-form-item label="所属 MCC">
-        <el-select v-model="form.mcc_id" clearable placeholder="（未分配）" style="width:100%;">
+        <el-select v-model="form.mcc_id" clearable placeholder="（未分配）" style="width:100%;" filterable>
           <el-option v-for="m in mccOptions" :key="m.id" :label="m.name + ' (' + m.mcc_id + ')'" :value="m.id" />
         </el-select>
       </el-form-item>

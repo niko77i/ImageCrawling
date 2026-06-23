@@ -28,6 +28,7 @@
 <script setup>
 import { ref, reactive } from 'vue'
 import { useProductStore } from '@/stores/products'
+import { ElMessage } from 'element-plus'
 
 const props = defineProps({ visible: Boolean, prodId: Number })
 const emit = defineEmits(['update:visible', 'saved'])
@@ -46,21 +47,44 @@ function init() {
 }
 
 async function preview() {
-  if (!form.text) return
+  if (!form.text.trim()) return
   parsing.value = true
-  const res = await store.importText({
-    text: form.text, prefix: form.prefix, suffix: form.suffix,
-    product_name: '', kpi: '', region: '',
-  })
-  parsed.value = res.parsed || []
-  editText.value = parsed.value.map(p => (p.series_name || '') + ' | ' + (p.package_name || '') + ' | ' + (p.url || '')).join('\n')
-  parsing.value = false
+  try {
+    const res = await store.importText({
+      text: form.text, prefix: form.prefix, suffix: form.suffix,
+      product_name: '', kpi: '', region: '',
+    })
+    parsed.value = res.parsed || []
+    if (!parsed.value.length) {
+      ElMessage.warning('未找到有效的 Google Play 链接')
+    }
+    editText.value = parsed.value.map(p => (p.series_name || '') + ' | ' + (p.package_name || '') + ' | ' + (p.url || '')).join('\n')
+  } catch (e) {
+    ElMessage.error('解析失败：' + (e.message || '未知错误'))
+  } finally {
+    parsing.value = false
+  }
 }
 
 async function submit() {
-  if (!parsed.value.length) return
+  // 从 editText 重新解析，确保用户的编辑生效
+  const lines = editText.value.trim().split('\n').filter(Boolean)
+  const pkgs = lines.map(line => {
+    const parts = line.split('|').map(s => s.trim())
+    return {
+      series_name: parts[0] || '',
+      package_name: parts[1] || '',
+      url: parts[2] || '',
+    }
+  }).filter(p => p.url)
+
+  if (!pkgs.length) {
+    ElMessage.warning('未找到有效的链接')
+    return
+  }
+
   saving.value = true
-  for (const pkg of parsed.value) {
+  for (const pkg of pkgs) {
     await store.addPackage(props.prodId, { series_name: pkg.series_name, package_name: pkg.package_name, url: pkg.url })
   }
   saving.value = false

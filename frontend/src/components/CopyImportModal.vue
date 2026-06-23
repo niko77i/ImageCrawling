@@ -56,6 +56,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { useProductStore } from '@/stores/products'
+import { ElMessage } from 'element-plus'
 
 const props = defineProps({ visible: Boolean })
 const emit = defineEmits(['update:visible', 'saved'])
@@ -78,15 +79,23 @@ function init() {
 }
 
 async function preview() {
-  if (!form.text) return
+  if (!form.text.trim()) return
   parsing.value = true
-  const res = await store.importText({
-    text: form.text, product_name: form.product_name || '',
-    kpi: form.kpi, region: form.region,
-    prefix: form.prefix, suffix: form.suffix,
-  })
-  parsed.value = res.parsed || []
-  parsing.value = false
+  try {
+    const res = await store.importText({
+      text: form.text, product_name: form.product_name || '',
+      kpi: form.kpi, region: form.region,
+      prefix: form.prefix, suffix: form.suffix,
+    })
+    parsed.value = res.parsed || []
+    if (!parsed.value.length) {
+      ElMessage.warning('未找到有效的 Google Play 链接')
+    }
+  } catch (e) {
+    ElMessage.error('解析失败：' + (e.message || '未知错误'))
+  } finally {
+    parsing.value = false
+  }
 }
 
 async function submit() {

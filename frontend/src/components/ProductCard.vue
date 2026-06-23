@@ -74,6 +74,7 @@
 import { ref, computed, watch } from 'vue'
 import { useProductStore } from '@/stores/products'
 import { ElMessageBox, ElMessage } from 'element-plus'
+import { copyToClipboard } from '@/utils/clipboard'
 
 const props = defineProps({ product: Object })
 const emit = defineEmits(['edit', 'detail', 'add-pkg', 'del', 'toggle-pause', 'refresh'])
@@ -125,13 +126,11 @@ function batchStatusChange(status) {
 function batchCopyLinks() {
   const links = packages.value.filter(p=>checkedIds.value.includes(p.id)&&p.url).map(p=>p.url)
   if(!links.length){ElMessage.warning('选中的包没有链接');return}
-  navigator.clipboard.writeText(links.join('\n')).then(()=>{ElMessage.success(`已复制 ${links.length} 个链接 ✓`)}).catch(()=>{})
+  copyToClipboard(links.join('\n')).then(()=>{ElMessage.success(`已复制 ${links.length} 个链接 ✓`)})
 }
 function copy(text) {
   if (!text) return
-  navigator.clipboard.writeText(text).then(() => {
-    ElMessage.success('已复制 ✓')
-  }).catch(() => {})
+  copyToClipboard(text).then(() => { ElMessage.success('已复制 ✓') })
 }
 
 function normalizeStatus(s) {

@@ -1,43 +1,49 @@
 <template>
-  <div>
-    <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;">
-      <el-button type="primary" @click="showModal()">➕ 新增 MCC</el-button>
-      <span style="color:#888;font-size:12px;">已选 {{ selected.length }} 条</span>
-      <el-button @click="batchDelete" :disabled="!selected.length">🗑 批量删除</el-button>
+  <div style="display:flex;flex-direction:column;height:100%;">
+    <!-- 工具栏 — 固定 -->
+    <div style="flex-shrink:0;">
+      <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center;">
+        <el-button type="primary" @click="showModal()">➕ 新增 MCC</el-button>
+        <span style="color:#888;font-size:12px;">已选 {{ selected.length }} 条</span>
+        <el-button @click="batchDelete" :disabled="!selected.length">🗑 批量删除</el-button>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <el-input v-model="store.mccFilters.search" placeholder="🔍 搜索名称/ID..." @input="search" style="flex:1;" clearable />
+        <el-input v-model="store.mccFilters.level" placeholder="等级关键词..." @input="search" style="width:150px;" clearable />
+      </div>
     </div>
 
-    <div style="display:flex;gap:8px;margin-bottom:12px;">
-      <el-input v-model="store.mccFilters.search" placeholder="🔍 搜索名称/ID..." @input="search" style="flex:1;" clearable />
-      <el-input v-model="store.mccFilters.level" placeholder="等级关键词..." @input="search" style="width:150px;" clearable />
-    </div>
+    <!-- 表格 + 分页 — 滚动区 -->
+    <div style="flex:1;min-height:0;overflow-y:auto;">
+      <el-table :data="mccTree" @selection-change="val => selected = val" stripe size="small"
+        row-key="id" :tree-props="{ children: 'children', hasChildren: 'hasChildren' }" default-expand-all
+        :row-class-name="mccRowClass">
+        <el-table-column type="selection" width="40" />
+        <el-table-column prop="name" label="MCC 名称" />
+        <el-table-column prop="mcc_id" label="MCC ID" width="150" />
+        <el-table-column prop="level" label="等级" width="70" />
+        <el-table-column prop="direct_count" label="账户数（直属）" width="110" />
+        <el-table-column label="总账户" width="70">
+          <template #default="{ row }">{{ row.total_accounts != null ? row.total_accounts : '-' }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="160">
+          <template #default="{ row }">
+            <el-button link type="primary" size="small" @click="showDetail(row.id)">📋</el-button>
+            <el-button link type="primary" size="small" @click="showModal(row.id)">✏️</el-button>
+            <el-button link type="danger" size="small" @click="del(row.id)">🗑</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
 
-    <el-table :data="mccTree" @selection-change="val => selected = val" stripe size="small"
-      row-key="id" :tree-props="{ children: 'children', hasChildren: 'hasChildren' }" default-expand-all
-      :row-class-name="mccRowClass">
-      <el-table-column type="selection" width="40" />
-      <el-table-column prop="name" label="MCC 名称" />
-      <el-table-column prop="mcc_id" label="MCC ID" width="150" />
-      <el-table-column prop="level" label="等级" width="70" />
-      <el-table-column prop="direct_count" label="账户数（直属）" width="110" />
-      <el-table-column label="总账户" width="70">
-        <template #default="{ row }">{{ row.total_accounts != null ? row.total_accounts : '-' }}</template>
-      </el-table-column>
-      <el-table-column label="操作" width="160">
-        <template #default="{ row }">
-          <el-button link type="primary" size="small" @click="showDetail(row.id)">📋</el-button>
-          <el-button link type="primary" size="small" @click="showModal(row.id)">✏️</el-button>
-          <el-button link type="danger" size="small" @click="del(row.id)">🗑</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
-
-    <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:12px;">
-      <el-pagination v-if="store.mccTotal > store.mccPageSize" v-model:current-page="store.mccPage"
-        :page-size="store.mccPageSize" :total="store.mccTotal" background
-        layout="prev,pager,next" size="small" :pager-count="7" @current-change="load" />
-      <el-select v-model="store.mccPageSize" @change="load" size="small" style="width:90px;">
-        <el-option v-for="s in [10,20,50]" :key="s" :label="s+'条/页'" :value="s" />
-      </el-select>
+      <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:12px;">
+        <el-pagination v-if="store.mccTotal > store.mccPageSize" v-model:current-page="store.mccPage"
+          :page-size="store.mccPageSize" :total="store.mccTotal" background
+          layout="prev,pager,next" size="small" :pager-count="7" @current-change="load" />
+        <el-select v-model="store.mccPageSize" @change="load" size="small" style="width:90px;">
+          <el-option v-for="s in [10,20,50]" :key="s" :label="s+'条/页'" :value="s" />
+        </el-select>
+      </div>
     </div>
 
     <MccModal v-model:visible="modalVisible" :edit-id="editId" @saved="load" />

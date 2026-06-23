@@ -213,3 +213,5 @@ https://play.google.com/store/apps/details?id=com.vibe.arc3&gl=un&pli=1
 
 ### 注意
 - 先和我讨论，我还有很多疑惑。
+
+## 新需求 计算户的违规率，使用图表展示

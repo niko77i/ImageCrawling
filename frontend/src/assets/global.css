@@ -11,3 +11,4 @@
 .el-card{border:1px solid #e5e7eb!important;border-radius:8px!important;box-shadow:none!important}
 .el-form-item__label{font-weight:500!important;color:#374151!important;text-transform:none!important;letter-spacing:0!important;font-size:13px!important}
 .el-tabs__nav-wrap::after{height:1px!important;background-color:#e5e7eb!important}
+.sticky-tabs{position:sticky;top:0;z-index:100;background:#f5f7fa;padding:4px 0 0 0;box-shadow:0 1px 3px rgba(0,0,0,0.04);}

@@ -28,7 +28,7 @@ def get_db() -> sqlite3.Connection:
     db_path = _db_path()
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
 
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
@@ -76,6 +76,7 @@ def _ensure_schema(conn: sqlite3.Connection):
             frame_type TEXT DEFAULT '非融帧',
             effectiveness TEXT DEFAULT '',
             product_name TEXT DEFAULT '',
+            review_status TEXT DEFAULT '能过审',
             imported_at TEXT
         );
 
@@ -111,9 +112,19 @@ def _ensure_schema(conn: sqlite3.Connection):
             agent TEXT DEFAULT '',
             status TEXT DEFAULT '存活',
             acquired_date TEXT DEFAULT (date('now','localtime')),
+            death_date TEXT DEFAULT '',
             created_at TEXT DEFAULT (datetime('now','localtime')),
             updated_at TEXT DEFAULT (datetime('now','localtime'))
         );
+
+        -- 文案管理
+        CREATE TABLE IF NOT EXISTS copywritings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            region TEXT NOT NULL DEFAULT '通用',
+            content TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now','localtime'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_copywritings_region ON copywritings(region);
 
         -- 产品与包管理
         CREATE TABLE IF NOT EXISTS products (
@@ -147,11 +158,22 @@ def _ensure_schema(conn: sqlite3.Connection):
         if "is_paused" in tcols and "status" not in tcols:
             conn.execute(f"ALTER TABLE {t} RENAME COLUMN is_paused TO status")
 
+    # 迁移：videos 表补 review_status 列（2026-06-16 新增）
+    vcols = [r[1] for r in conn.execute("PRAGMA table_info(videos)").fetchall()]
+    if "review_status" not in vcols:
+        conn.execute("ALTER TABLE videos ADD COLUMN review_status TEXT DEFAULT '能过审'")
+
+    # 迁移：accounts 表补 death_date 列（2026-06-21 新增）
+    acols = [r[1] for r in conn.execute("PRAGMA table_info(accounts)").fetchall()]
+    if "death_date" not in acols:
+        conn.execute("ALTER TABLE accounts ADD COLUMN death_date TEXT DEFAULT ''")
+
     # 初始化默认标签
     for k, v in [("regions", '["巴西","菲律宾","孟加拉","印尼","东南亚通用","通用"]'),
                  ("frame_types", '["融帧","非融帧"]'),
                  ("effectiveness", '["","成效","一般"]'),
-                 ("product_names", '["p222","93ok"]')]:
+                 ("product_names", '["p222","93ok"]'),
+                 ("review_statuses", '["能过审","不能过审"]')]:
         conn.execute("INSERT OR IGNORE INTO tags(key,value) VALUES(?,?)", (k, v))
 
 
@@ -241,12 +263,12 @@ def _migrate_youtube_db(conn: sqlite3.Connection, root: str):
         for r in rows:
             d = dict(r)
             conn.execute(
-                "INSERT OR IGNORE INTO videos(id,url,title,region,frame_type,effectiveness,product_name,imported_at) "
-                "VALUES(?,?,?,?,?,?,?,?)",
+                "INSERT OR IGNORE INTO videos(id,url,title,region,frame_type,effectiveness,product_name,review_status,imported_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?)",
                 (d.get("id"), d.get("url"), d.get("title"),
                  d.get("region", "通用"), d.get("frame_type", "非融帧"),
                  d.get("effectiveness", ""), d.get("product_name", ""),
-                 d.get("imported_at", ""))
+                 d.get("review_status", "能过审"), d.get("imported_at", ""))
             )
 
         # 迁移 tags
@@ -299,12 +321,12 @@ def _migrate_youtube_json(conn: sqlite3.Connection, json_path: str):
         if not isinstance(v, dict):
             continue
         conn.execute(
-            "INSERT OR IGNORE INTO videos(id,url,title,region,frame_type,effectiveness,product_name,imported_at) "
-            "VALUES(?,?,?,?,?,?,?,?)",
+            "INSERT OR IGNORE INTO videos(id,url,title,region,frame_type,effectiveness,product_name,review_status,imported_at) "
+            "VALUES(?,?,?,?,?,?,?,?,?)",
             (v.get("id"), v.get("url"), v.get("title"),
              v.get("region", "通用"), v.get("frame_type", "非融帧"),
              v.get("effectiveness", ""), v.get("product_name", ""),
-             v.get("imported_at", ""))
+             v.get("review_status", "能过审"), v.get("imported_at", ""))
         )
 
 

@@ -22,7 +22,8 @@ const routes = [
     redirect: '/youtube/view',
     children: [
       { path: 'view', component: () => import('../views/YoutubeView.vue'), meta: { title: '视频展示' } },
-      { path: 'import', component: () => import('../views/YoutubeView.vue'), meta: { title: '导入视频' } },
+      { path: 'copywriting', component: () => import('../views/YoutubeView.vue'), meta: { title: '文案展示' } },
+      { path: 'import', component: () => import('../views/YoutubeView.vue'), meta: { title: '导入视频或文案' } },
       { path: 'config', component: () => import('../views/YoutubeView.vue'), meta: { title: '标签配置' } },
     ]
   },
@@ -35,6 +36,7 @@ const routes = [
     children: [
       { path: 'zuobiao', component: () => import('../views/ToolkitView.vue'), meta: { title: '做表数据' } },
       { path: 'audio', component: () => import('../views/ToolkitView.vue'), meta: { title: '音频替换' } },
+      { path: 'translate', component: () => import('../views/ToolkitView.vue'), meta: { title: '翻译工具' } },
     ]
   },
 ]
