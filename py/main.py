@@ -849,6 +849,7 @@ def youtube_import():
     frame_type = (data.get("frame_type") or "非融帧").strip()
     effectiveness = (data.get("effectiveness") or "").strip()
     product_name = (data.get("product_name") or "").strip()
+    review_status = (data.get("review_status") or "能过审").strip()
     if not urls:
         return jsonify({"success": False, "error": "请输入至少一个链接"}), 400
 
@@ -874,8 +875,8 @@ def youtube_import():
                 title = r.json().get("title", vid)
         except Exception: pass
 
-        db.execute("INSERT INTO videos(id,url,title,region,frame_type,effectiveness,product_name,imported_at) VALUES(?,?,?,?,?,?,?,?)",
-                   (vid, f"https://www.youtube.com/watch?v={vid}", title, region, frame_type, effectiveness, product_name,
+        db.execute("INSERT INTO videos(id,url,title,region,frame_type,effectiveness,product_name,review_status,imported_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                   (vid, f"https://www.youtube.com/watch?v={vid}", title, region, frame_type, effectiveness, product_name, review_status,
                     datetime.datetime.now().strftime("%Y-%m-%d %H:%M")))
         imported += 1
 
@@ -889,20 +890,36 @@ def youtube_list():
     frame_type = request.args.get("frame_type", "").strip()
     effectiveness = request.args.get("effectiveness", "").strip()
     product_name = request.args.get("product_name", "").strip()
+    review_status = request.args.get("review_status", "").strip()
+    from_date = request.args.get("from_date", "").strip()
+    to_date = request.args.get("to_date", "").strip()
+    import datetime
 
     db = _yt_db()
     where = []; params = []
     for f, v in [("region", region), ("frame_type", frame_type), ("effectiveness", effectiveness), ("product_name", product_name)]:
         if v: where.append(f"{f}=?"); params.append(v)
+    # 审核状态：默认筛选「能过审」，传空或"全部"则不过滤
+    if review_status and review_status != "全部":
+        where.append("review_status=?"); params.append(review_status)
+    if from_date:
+        where.append("imported_at >= ?"); params.append(from_date)
+    if to_date:
+        # to_date 为结束日期当天，需包含完整当天，故加一天用 < 比较
+        try:
+            dt = datetime.datetime.strptime(to_date, "%Y-%m-%d") + datetime.timedelta(days=1)
+            where.append("imported_at < ?"); params.append(dt.strftime("%Y-%m-%d"))
+        except ValueError:
+            pass
 
     query = "SELECT * FROM videos"
     if where: query += " WHERE " + " AND ".join(where)
-    query += " ORDER BY CASE effectiveness WHEN '成效' THEN 0 WHEN '一般' THEN 1 ELSE 2 END, imported_at DESC"
+    query += " ORDER BY CASE review_status WHEN '不能过审' THEN 1 ELSE 0 END, CASE effectiveness WHEN '成效' THEN 0 WHEN '一般' THEN 1 ELSE 2 END, imported_at DESC"
 
     rows = db.execute(query, params).fetchall()
     videos = [dict(r) for r in rows]
 
-    counts = {"region": {}, "frame_type": {}, "effectiveness": {}, "product_name": {}}
+    counts = {"region": {}, "frame_type": {}, "effectiveness": {}, "product_name": {}, "review_status": {}}
     for v in videos:
         for field in counts:
             val = v.get(field, "") or ""
@@ -910,6 +927,33 @@ def youtube_list():
 
     db.close()
     return jsonify({"success": True, "videos": videos, "counts": counts})
+
+
+@app.route("/api/youtube/dates", methods=["GET"])
+def youtube_dates():
+    """返回当前筛选条件下有视频的日期及数量，供日期选择器标记使用。"""
+    region = request.args.get("region", "").strip()
+    frame_type = request.args.get("frame_type", "").strip()
+    effectiveness = request.args.get("effectiveness", "").strip()
+    product_name = request.args.get("product_name", "").strip()
+    review_status = request.args.get("review_status", "").strip()
+
+    db = _yt_db()
+    where = []; params = []
+    for f, v in [("region", region), ("frame_type", frame_type), ("effectiveness", effectiveness), ("product_name", product_name)]:
+        if v: where.append(f"{f}=?"); params.append(v)
+    if review_status and review_status != "全部":
+        where.append("review_status=?"); params.append(review_status)
+
+    query = "SELECT substr(imported_at, 1, 10) AS date, COUNT(*) AS cnt FROM videos"
+    if where:
+        query += " WHERE " + " AND ".join(where)
+    query += " GROUP BY date ORDER BY date DESC"
+
+    rows = db.execute(query, params).fetchall()
+    dates = {r["date"]: r["cnt"] for r in rows}
+    db.close()
+    return jsonify({"success": True, "dates": dates})
 
 
 @app.route("/api/youtube/delete", methods=["POST"])
@@ -929,12 +973,30 @@ def youtube_edit():
     vid = (data.get("id") or "").strip()
     if not vid: return jsonify({"success": False, "error": "未指定视频ID"}), 400
     db = _yt_db()
-    for f in ["region", "frame_type", "effectiveness", "product_name"]:
+    for f in ["region", "frame_type", "effectiveness", "product_name", "review_status"]:
         if f in data: db.execute(f"UPDATE videos SET {f}=? WHERE id=?", (data[f], vid))
     db.commit()
     row = db.execute("SELECT * FROM videos WHERE id=?", (vid,)).fetchone()
     db.close()
     return jsonify({"success": True, "video": dict(row)} if row else {"success": False, "error": "未找到"})
+
+
+@app.route("/api/youtube/batch-edit", methods=["POST"])
+def youtube_batch_edit():
+    data = request.get_json(silent=True) or {}
+    ids = data.get("ids") or []
+    field = (data.get("field") or "").strip()
+    value = (data.get("value") or "").strip()
+    if not ids:
+        return jsonify({"success": False, "error": "未指定视频ID"}), 400
+    if field not in ("region", "frame_type", "effectiveness", "product_name", "review_status"):
+        return jsonify({"success": False, "error": "无效字段"}), 400
+    db = _yt_db()
+    for vid in ids:
+        db.execute(f"UPDATE videos SET {field}=? WHERE id=?", (value, vid))
+    db.commit()
+    db.close()
+    return jsonify({"success": True, "updated": len(ids)})
 
 
 @app.route("/api/youtube/tags", methods=["GET"])
@@ -955,6 +1017,7 @@ def youtube_tags_save():
     new_frames = data.get("frame_types") or []
     new_effs = data.get("effectiveness") or []
     new_prods = data.get("product_names") or []
+    new_review_statuses = data.get("review_statuses") or []
 
     db = _yt_db()
     old_tags = {}
@@ -965,10 +1028,11 @@ def youtube_tags_save():
     old_frames = old_tags.get("frame_types", [])
     old_effs = [e for e in old_tags.get("effectiveness", []) if e]
     old_prods = old_tags.get("product_names", [])
+    old_review_statuses = old_tags.get("review_statuses", [])
 
     renames = {}; deleted_videos = []
 
-    for old_val, new_list, field_name in [(old_regions, new_regions, "region"), (old_frames, new_frames, "frame_type"), (old_effs, new_effs, "effectiveness"), (old_prods, new_prods, "product_name")]:
+    for old_val, new_list, field_name in [(old_regions, new_regions, "region"), (old_frames, new_frames, "frame_type"), (old_effs, new_effs, "effectiveness"), (old_prods, new_prods, "product_name"), (old_review_statuses, new_review_statuses, "review_status")]:
         for i, old_val in enumerate(old_val):
             if i < len(new_list) and new_list[i] != old_val:
                 renames[(field_name, old_val)] = new_list[i]
@@ -984,7 +1048,7 @@ def youtube_tags_save():
             for r in db.execute(f"SELECT id, title FROM videos WHERE {field}=?", (deleted_val,)).fetchall():
                 affected.append({"id": r["id"], "title": r["title"] or r["id"], "field": field, "old_value": deleted_val})
 
-    for k, v in [("regions", new_regions), ("frame_types", new_frames), ("effectiveness", new_effs), ("product_names", new_prods)]:
+    for k, v in [("regions", new_regions), ("frame_types", new_frames), ("effectiveness", new_effs), ("product_names", new_prods), ("review_statuses", new_review_statuses)]:
         db.execute("INSERT OR REPLACE INTO tags(key,value) VALUES(?,?)", (k, _json.dumps(v, ensure_ascii=False)))
 
     db.commit(); db.close()
@@ -1410,41 +1474,65 @@ def accounts_create():
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     try:
         db.execute(
-            "INSERT INTO accounts(name,account_id,mcc_id,timezone,agent,status,acquired_date,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO accounts(name,account_id,mcc_id,timezone,agent,status,acquired_date,death_date,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
             (name, account_id,
              data.get("mcc_id") or None,
              (data.get("timezone") or "").strip(),
              (data.get("agent") or "").strip(),
              (data.get("status") or "存活").strip(),
              (data.get("acquired_date") or datetime.date.today().isoformat()),
+             (data.get("death_date") or "").strip(),
              now, now))
         db.commit()
         new_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
         db.close()
         return jsonify({"success": True, "id": new_id})
-    except _sqlite3.IntegrityError:
+    except _sqlite3.IntegrityError as e:
+        err_msg = str(e).lower()
         db.close()
-        return jsonify({"success": False, "error": f"账户 ID '{account_id}' 已存在"}), 409
+        if "foreign key" in err_msg:
+            return jsonify({"success": False, "error": f"所属 MCC 不存在，请先创建 MCC"}), 409
+        if "account_id" in err_msg or "unique" in err_msg:
+            return jsonify({"success": False, "error": f"账户 ID '{account_id}' 已存在"}), 409
+        return jsonify({"success": False, "error": f"数据完整性错误: {e}"}), 409
 
 
 @app.route("/api/accounts/<int:aid>", methods=["PUT"])
 def accounts_update(aid):
     data = request.get_json(silent=True) or {}
     db = _yt_db()
-    for f in ["name", "mcc_id", "timezone", "agent", "status", "acquired_date"]:
-        if f in data:
-            db.execute(f"UPDATE accounts SET {f}=?, updated_at=datetime('now','localtime') WHERE id=?",
-                       (data[f], aid))
-    db.commit(); db.close()
-    return jsonify({"success": True})
+    try:
+        for f in ["name", "mcc_id", "timezone", "agent", "status", "acquired_date", "death_date"]:
+            if f in data:
+                val = data[f]
+                # mcc_id 空字符串/0 转 None，避免 FK 约束失败
+                if f == "mcc_id":
+                    if val is None or val == 0 or val == "0" or (isinstance(val, str) and not val.strip()):
+                        val = None
+                db.execute(f"UPDATE accounts SET {f}=?, updated_at=datetime('now','localtime') WHERE id=?",
+                           (val, aid))
+        db.commit()
+        return jsonify({"success": True})
+    except _sqlite3.IntegrityError as e:
+        err_msg = str(e).lower()
+        if "foreign key" in err_msg:
+            return jsonify({"success": False, "error": "所属 MCC 不存在，请先选择有效的 MCC"}), 409
+        return jsonify({"success": False, "error": f"数据完整性错误: {e}"}), 409
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        db.close()
 
 
 @app.route("/api/accounts/<int:aid>", methods=["DELETE"])
 def accounts_delete(aid):
     db = _yt_db()
-    db.execute("DELETE FROM accounts WHERE id=?", (aid,))
-    db.commit(); db.close()
-    return jsonify({"success": True})
+    try:
+        db.execute("DELETE FROM accounts WHERE id=?", (aid,))
+        db.commit()
+        return jsonify({"success": True})
+    finally:
+        db.close()
 
 
 @app.route("/api/accounts/batch-delete", methods=["POST"])
@@ -1454,10 +1542,13 @@ def accounts_batch_delete():
     if not ids:
         return jsonify({"success": False, "error": "未选择账户"}), 400
     db = _yt_db()
-    for aid in ids:
-        db.execute("DELETE FROM accounts WHERE id=?", (aid,))
-    db.commit(); db.close()
-    return jsonify({"success": True, "deleted": len(ids)})
+    try:
+        for aid in ids:
+            db.execute("DELETE FROM accounts WHERE id=?", (aid,))
+        db.commit()
+        return jsonify({"success": True, "deleted": len(ids)})
+    finally:
+        db.close()
 
 
 @app.route("/api/accounts/batch-update", methods=["POST"])
@@ -1472,11 +1563,17 @@ def accounts_batch_update():
     if field not in allowed:
         return jsonify({"success": False, "error": f"不允许修改字段: {field}"}), 400
     db = _yt_db()
-    for aid in ids:
-        db.execute(f"UPDATE accounts SET {field}=?, updated_at=datetime('now','localtime') WHERE id=?",
-                   (value, aid))
-    db.commit(); db.close()
-    return jsonify({"success": True, "updated": len(ids)})
+    try:
+        # mcc_id 空值/0 转 None，避免 FK 约束失败
+        if field == "mcc_id" and (value is None or value == 0 or value == "0" or (isinstance(value, str) and not value.strip())):
+            value = None
+        for aid in ids:
+            db.execute(f"UPDATE accounts SET {field}=?, updated_at=datetime('now','localtime') WHERE id=?",
+                       (value, aid))
+        db.commit()
+        return jsonify({"success": True, "updated": len(ids)})
+    finally:
+        db.close()
 
 
 # ---------- MCC API ----------
@@ -2055,6 +2152,118 @@ def google_ads_report():
         return jsonify({"success": False, "error": str(e)}), 500
     except Exception as e:
         return jsonify({"success": False, "error": f"未知错误: {e}"}), 500
+
+
+# ---------- 文案管理 API ----------
+
+@app.route("/api/copywriting/import", methods=["POST"])
+def copywriting_import():
+    data = request.get_json(silent=True) or {}
+    text = (data.get("text") or "").strip()
+    region = (data.get("region") or "通用").strip()
+    if not text:
+        return jsonify({"success": False, "error": "请输入文案内容"}), 400
+
+    lines = [line.strip() for line in text.split("\n") if line.strip()]
+    if not lines:
+        return jsonify({"success": False, "error": "未解析到有效文案"}), 400
+
+    db = _yt_db()
+    for line in lines:
+        db.execute(
+            "INSERT INTO copywritings(region, content) VALUES(?,?)",
+            (region, line)
+        )
+    db.commit(); db.close()
+    return jsonify({"success": True, "imported": len(lines)})
+
+
+@app.route("/api/copywriting/list", methods=["GET"])
+def copywriting_list():
+    region = request.args.get("region", "").strip()
+    db = _yt_db()
+
+    if region:
+        rows = db.execute(
+            "SELECT * FROM copywritings WHERE region=? ORDER BY created_at DESC",
+            (region,)
+        ).fetchall()
+    else:
+        rows = db.execute(
+            "SELECT * FROM copywritings ORDER BY created_at DESC"
+        ).fetchall()
+
+    items = [dict(r) for r in rows]
+    counts = {}
+    for item in items:
+        r = item.get("region", "")
+        counts[r] = counts.get(r, 0) + 1
+
+    db.close()
+    return jsonify({"success": True, "items": items, "counts": counts})
+
+
+@app.route("/api/copywriting/edit", methods=["POST"])
+def copywriting_edit():
+    data = request.get_json(silent=True) or {}
+    cid = data.get("id")
+    if not cid:
+        return jsonify({"success": False, "error": "未指定文案ID"}), 400
+    db = _yt_db()
+    for f in ["region", "content"]:
+        if f in data:
+            db.execute(f"UPDATE copywritings SET {f}=? WHERE id=?", (data[f], cid))
+    db.commit()
+    row = db.execute("SELECT * FROM copywritings WHERE id=?", (cid,)).fetchone()
+    db.close()
+    return jsonify({"success": True, "item": dict(row)} if row else {"success": False, "error": "未找到"})
+
+
+@app.route("/api/copywriting/delete", methods=["POST"])
+def copywriting_delete():
+    data = request.get_json(silent=True) or {}
+    ids = data.get("ids") or []
+    if not ids:
+        return jsonify({"success": False, "error": "未指定文案"}), 400
+    db = _yt_db()
+    for cid in ids:
+        db.execute("DELETE FROM copywritings WHERE id=?", (cid,))
+    db.commit(); db.close()
+    return jsonify({"success": True, "deleted": len(ids)})
+
+
+@app.route("/api/copywriting/batch-edit", methods=["POST"])
+def copywriting_batch_edit():
+    data = request.get_json(silent=True) or {}
+    ids = data.get("ids") or []
+    region = (data.get("region") or "").strip()
+    if not ids:
+        return jsonify({"success": False, "error": "未指定文案ID"}), 400
+    if not region:
+        return jsonify({"success": False, "error": "请选择地区"}), 400
+    db = _yt_db()
+    for cid in ids:
+        db.execute("UPDATE copywritings SET region=? WHERE id=?", (region, cid))
+    db.commit(); db.close()
+    return jsonify({"success": True, "updated": len(ids)})
+
+
+# ---------- 翻译 API ----------
+
+@app.route("/api/translate", methods=["POST"])
+def translate_text():
+    """Google 翻译，基于 deep-translator。"""
+    data = request.get_json(silent=True) or {}
+    text = (data.get("text") or "").strip()
+    target = (data.get("target") or "zh-CN").strip()
+    if not text:
+        return jsonify({"success": False, "error": "请输入要翻译的文本"}), 400
+    try:
+        from deep_translator import GoogleTranslator
+        result = GoogleTranslator(source='auto', target=target).translate(text)
+        return jsonify({"success": True, "translated": result})
+    except Exception as e:
+        return jsonify({"success": False, "error": f"翻译失败: {str(e)}"}), 500
 
 
 # ---------- 启动 ----------
