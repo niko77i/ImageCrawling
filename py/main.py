@@ -850,6 +850,7 @@ def youtube_import():
     effectiveness = (data.get("effectiveness") or "").strip()
     product_name = (data.get("product_name") or "").strip()
     review_status = (data.get("review_status") or "能过审").strip()
+    imported_at = (data.get("imported_at") or "").strip()
     if not urls:
         return jsonify({"success": False, "error": "请输入至少一个链接"}), 400
 
@@ -858,6 +859,10 @@ def youtube_import():
     duplicates = []
     import datetime
     import requests as _req
+
+    # 导入时间：优先使用前端传入，否则用当前时间
+    if not imported_at:
+        imported_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
 
     for url in urls:
         url = url.strip()
@@ -876,8 +881,7 @@ def youtube_import():
         except Exception: pass
 
         db.execute("INSERT INTO videos(id,url,title,region,frame_type,effectiveness,product_name,review_status,imported_at) VALUES(?,?,?,?,?,?,?,?,?)",
-                   (vid, f"https://www.youtube.com/watch?v={vid}", title, region, frame_type, effectiveness, product_name, review_status,
-                    datetime.datetime.now().strftime("%Y-%m-%d %H:%M")))
+                   (vid, f"https://www.youtube.com/watch?v={vid}", title, region, frame_type, effectiveness, product_name, review_status, imported_at))
         imported += 1
 
     db.commit(); db.close()

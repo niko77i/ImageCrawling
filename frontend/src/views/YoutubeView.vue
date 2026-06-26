@@ -186,7 +186,7 @@
 
       <div v-show="importSubTab === 'video'">
         <el-input v-model="importUrls" type="textarea" :rows="6" placeholder="每行一个 YouTube 链接..." />
-        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:12px;">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;">
           <el-select v-model="importRegion" placeholder="地区" size="small">
             <el-option v-for="r in store.tags.regions" :key="r" :label="r" :value="r" />
           </el-select>
@@ -202,6 +202,9 @@
           <el-select v-model="importReview" placeholder="审核" size="small">
             <el-option v-for="s in store.tags.review_statuses" :key="s" :label="s" :value="s" />
           </el-select>
+          <el-date-picker v-model="importTime" type="datetime" placeholder="导入时间" size="small"
+            format="YYYY-MM-DD HH:mm" value-format="YYYY-MM-DD HH:mm"
+            @change="onImportTimeChange" :clearable="false" style="width:100%;" />
         </div>
         <el-button type="primary" @click="doImport" :loading="importing" style="margin-top:12px;">保存视频</el-button>
         <div v-if="importResult" style="margin-top:8px;font-size:12px;">{{ importResult }}</div>
@@ -451,14 +454,29 @@ const importFrame = ref('非融帧')
 const importEff = ref('')
 const importProd = ref('')
 const importReview = ref('能过审')
+const importTime = ref(getNowStr())
 const importing = ref(false)
 const importResult = ref('')
+
+function getNowStr() {
+  const d = new Date()
+  const pad = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function onImportTimeChange(val) {
+  // 显式捕获日期选择器的值变更
+  console.log('[导入] 时间选择器变更:', val, '类型:', typeof val)
+  if (val) importTime.value = val
+}
 
 async function doImport() {
   const urls = importUrls.value.split(/[\n,]+/).map(s => s.trim()).filter(s => s && s.includes('youtu'))
   if (!urls.length) return
   importing.value = true
-  const res = await store.importVideos({ urls, region: importRegion.value, frame_type: importFrame.value, effectiveness: importEff.value, product_name: importProd.value, review_status: importReview.value })
+  const finalTime = importTime.value || getNowStr()
+  console.log('[导入] 发送的 imported_at:', finalTime)
+  const res = await store.importVideos({ urls, region: importRegion.value, frame_type: importFrame.value, effectiveness: importEff.value, product_name: importProd.value, review_status: importReview.value, imported_at: finalTime })
   importResult.value = `导入 ${res.imported} 个，重复 ${(res.duplicates || []).length} 个`
   importUrls.value = ''
   importing.value = false
